@@ -9,7 +9,7 @@
 
 - [x] **01** اسکلت ریپو: پکیج‌ها (core/kiosk/admin/hardware/tests)، requirements، .gitignore، placeholders
 - [x] **02** TASKS.md با چک‌لیست کامل
-- [ ] **03** هسته SQLite: schema، مدل‌ها، ریپازیتوری محصولات، سفارش‌ها، آمار + pytest
+- [x] **03** هسته SQLite: schema، مدل‌ها، ریپازیتوری محصولات، سفارش‌ها، آمار + pytest
 - [ ] **04** حالت شبیه‌ساز لپ‌تاپ: کانفیگ (فایل + env) + ورودی کیبورد
 
 ## فاز ۱ — کیوسک رترو (Pygame-CE، 480×800 عمودی)
