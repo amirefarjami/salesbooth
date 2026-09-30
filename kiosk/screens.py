@@ -41,8 +41,13 @@ class AttractScreen(Screen):
         t = app.theme
         self.blink = 0.0
         self.logo = self._make_logo(t.fonts.px("title"), t.fonts.fa("title"))
-        lx = random.randint(60, t.w - 60 - self.logo.get_width())
-        ly = random.randint(80, t.h // 3)
+        # keep the logo inside the screen even if fonts render large
+        if self.logo.get_width() > t.w - 40:
+            self.logo = pygame.transform.smoothscale(
+                self.logo, (t.w - 40,
+                            int(self.logo.get_height() * (t.w - 40) / self.logo.get_width())))
+        lx = random.randint(20, max(21, t.w - 20 - self.logo.get_width()))
+        ly = random.randint(80, max(81, t.h // 3))
         self.pos = [float(lx), float(ly)]
         self.vel = [130.0, 96.0]
         self.hint = t.fonts.fa("lg")
