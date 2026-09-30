@@ -1,0 +1,44 @@
+# CHIZ Booth — optional config file.
+# Copy to booth.toml and edit. Every key is optional; env vars CHIZ_* win.
+# On the Pi kiosk, set  fullscreen = true  and  scanlines = true .
+
+[booth]
+screen_w = 480
+screen_h = 800
+fullscreen = false
+fps = 60
+scanlines = true
+scanline_strength = 32
+
+attract_timeout_s = 60
+
+sound = true
+sfx_volume = 0.8
+
+led_count = 8
+led_gpio = 18
+led_brightness = 160
+led_enabled = true
+
+admin_host = "0.0.0.0"
+admin_port = 8000
+admin_pin = "1390"
+
+hostname = "chiz"
+currency = "تومان"
+
+payment_provider = "manual"   # manual | free | zarinpal
+zarinpal_merchant_id = ""
+zarinpal_sandbox = true
+payment_poll_seconds = 3.0
+payment_timeout_s = 180
+
+order_ttl_minutes = 30
+
+[booth.keymap]
+up = "up"
+down = "down"
+left = "left"
+right = "right"
+confirm = "return"
+cancel = "escape"
