@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set nav = 'home' %}
+{% block body %}
+<div class="panel">
+  <h2>امروز</h2>
+  <div class="row" style="gap:24px; font-size:20px;">
+    <div>🧾 سفارش: <b>{{ today.orders }}</b></div>
+    <div>💰 فروش: <b class="price">{{ today.revenue|toman }}</b></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>سفارش‌های باز <span class="muted">(به‌روزرسانی خودکار)</span></h2>
+  <div id="open-orders"><p class="muted">بارگذاری…</p></div>
+</div>
+
+<div class="panel">
+  <h2>موجودی کم</h2>
+  {% if low_stock %}
+  <ul>
+    {% for p in low_stock %}
+    <li>{{ p.name }} — <b class="bad">{{ p.stock }}</b> عدد باقی‌مانده</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">همه موجودی‌ها خوبه ✅</p>{% endif %}
+</div>
+
+<script>
+async function refresh(){
+  const r = await fetch('/admin/api/open-orders');
+  if(!r.ok) return;
+  const data = await r.json();
+  const el = document.getElementById('open-orders');
+  if(!data.orders.length){ el.innerHTML = '<p class="muted">سفارش بازی نیست.</p>'; return; }
+  el.innerHTML = data.orders.map(o => `
+    <div class="panel" style="margin:8px 0; ${o.status==='paid'?'border-color:var(--green)':''}">
+      <div class="row" style="justify-content:space-between">
+        <b style="font-size:26px; color:var(--amber)">کد ${o.code}</b>
+        <span class="${o.status==='paid'?'ok':'bad'}">${o.status==='paid'?'پرداخت شده':'منتظر پرداخت'}</span>
+      </div>
+      <div>${o.items.map(i=>`${i.name} × ${i.qty}`).join(' — ')}
+        <b class="price">${o.total.toLocaleString('fa-IR')} تومان</b></div>
+      ${o.status==='pending'
+        ? `<form method="post" action="/admin/orders/${o.id}/approve">
+             <button>✅ تأیید پرداخت (دستی)</button></form>`
+        : `<form method="post" action="/admin/orders/${o.id}/deliver">
+             <button>📦 تحویل شد</button></form>`}
+    </div>`).join('');
+}
+refresh(); setInterval(refresh, 3000);
+</script>
+{% endblock %}

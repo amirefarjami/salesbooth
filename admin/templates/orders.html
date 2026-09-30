@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set nav = 'orders' %}
+{% block body %}
+<div class="panel">
+  <h2>۵۰ سفارش آخر</h2>
+  <table>
+    <tr><th>کد</th><th>وضعیت</th><th>اقلام</th><th>مبلغ</th><th>پرداخت</th><th>زمان</th></tr>
+    {% for o in orders %}
+    <tr>
+      <td><b>{{ o.order.code }}</b></td>
+      <td class="{% if o.order.status in ('paid','delivered') %}ok{% elif o.order.status=='pending' %}bad{% endif %}">
+        {{ {'pending':'در انتظار','paid':'پرداخت شده','delivered':'تحویل شده',
+            'canceled':'لغو شده','expired':'منقضی'}[o.order.status] }}
+      </td>
+      <td>{% for i in o.items %}{{ i.name }} × {{ i.qty }}{% if not loop.last %}، {% endif %}{% endfor %}</td>
+      <td class="price">{{ o.order.total_toman|toman }}</td>
+      <td class="muted">{{ o.order.provider }}</td>
+      <td class="muted">{{ o.order.created_at|jalali }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

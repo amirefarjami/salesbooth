@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set nav = 'products' %}
+{% block body %}
+<div class="panel">
+  <h2>محصول جدید</h2>
+  <form method="post" action="/admin/products/create" enctype="multipart/form-data">
+    <div class="row" style="flex-wrap:wrap">
+      <input name="name" placeholder="نام محصول" style="flex:2; min-width:180px" required>
+      <input name="price_toman" type="number" min="0" placeholder="قیمت (تومان)" style="flex:1; min-width:130px" required>
+      <input name="stock" type="number" min="0" value="5" style="flex:1; min-width:90px">
+      <input name="sort_order" type="number" value="0" style="max-width:80px" title="ترتیب">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="file" name="image" accept="image/*">
+      <label class="muted"><input type="checkbox" name="active" checked style="width:auto"> فعال</label>
+      <button type="submit">➕ افزودن</button>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>محصولات ({{ products|length }})</h2>
+  <table>
+    <tr><th>عکس</th><th>نام</th><th>قیمت</th><th>موجودی</th><th>فعال</th><th>عملیات</th></tr>
+    {% for p in products %}
+    <tr class="{% if p.stock == 0 %}low{% endif %}">
+      <td>
+        {% if p.image_path %}<img class="thumb" src="/admin/img/{{ p.image_path }}">{% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td colspan="5">
+        <form method="post" action="/admin/products/{{ p.id }}/update" enctype="multipart/form-data"
+              class="inline" style="width:100%">
+          <input name="name" value="{{ p.name }}" style="flex:2; min-width:150px">
+          <input name="price_toman" type="number" value="{{ p.price_toman }}" style="max-width:120px">
+          <input name="stock" type="number" value="{{ p.stock }}" style="max-width:80px">
+          <input name="sort_order" type="number" value="{{ p.sort_order }}" style="max-width:70px">
+          <label class="muted"><input type="checkbox" name="active" {% if p.active %}checked{% endif %} style="width:auto"> فعال</label>
+          <input type="file" name="image" accept="image/*" style="max-width:170px">
+          <button class="small">💾 ذخیره</button>
+        </form>
+        <form method="post" action="/admin/products/{{ p.id }}/delete" class="inline"
+              onsubmit="return confirm('حذف {{ p.name }}؟')">
+          <button class="small danger">🗑</button>
+        </form>
+        <form method="post" action="/admin/products/{{ p.id }}/stock" class="inline">
+          <input type="hidden" name="delta" value="1"><button class="small">+۱</button>
+        </form>
+        <form method="post" action="/admin/products/{{ p.id }}/stock" class="inline">
+          <input type="hidden" name="delta" value="-1"><button class="small">−۱</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
