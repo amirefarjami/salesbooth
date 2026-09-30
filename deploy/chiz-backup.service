@@ -1,0 +1,7 @@
+[Unit]
+Description=CHIZ Booth database backup
+
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/usr/bin/env bash /home/pi/salesbooth/scripts/backup_db.sh
