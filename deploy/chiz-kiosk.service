@@ -1,0 +1,25 @@
+# CHIZ Booth — kiosk service
+# Install:  sudo cp deploy/chiz-kiosk.service /etc/systemd/system/
+#           sudo systemctl enable --now chiz-kiosk
+[Unit]
+Description=CHIZ Booth Kiosk (Pygame UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/salesbooth
+Environment=SDL_VIDEODRIVER=fbcon
+Environment=SDL_FBDEV=/dev/fb0
+Environment=CHIZ_FULLSCREEN=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/salesbooth/.venv/bin/python -m kiosk.app
+Restart=always
+RestartSec=3
+# watchdog: service must call sd_notify WATCHDOG=1; simple restart-on-exit
+# plus kernel OOM handling is enough for the booth.
+WatchdogSec=0
+
+[Install]
+WantedBy=multi-user.target
