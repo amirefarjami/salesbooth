@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}باجه چیز{% endblock %}</title>
+<style>
+  :root{
+    --bg:#0a0c22; --panel:#161c44; --panel2:#26307a; --line:#5668c8;
+    --line-hi:#8ca0ff; --cream:#fff0c8; --amber:#ffc43c; --red:#e83030;
+    --green:#3cdc78; --gray:#828cb4;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--cream);
+    font-family:Tahoma, "Vazirmatn", sans-serif; font-size:16px; padding-bottom:80px;}
+  h1,h2{color:var(--amber); margin:16px 0;}
+  a{color:var(--line-hi); text-decoration:none;}
+  .wrap{max-width:760px; margin:0 auto; padding:12px;}
+  nav{display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 20px;}
+  nav a{background:var(--panel); border:2px solid var(--line); padding:8px 14px;
+    color:var(--cream); font-weight:bold;}
+  nav a.active{border-color:var(--amber); color:var(--amber);}
+  .panel{background:var(--panel); border:2px solid var(--line); padding:14px; margin:14px 0;}
+  table{width:100%; border-collapse:collapse; font-size:14px;}
+  th,td{border:1px solid var(--line); padding:7px 8px; text-align:right;}
+  th{background:var(--panel2); color:var(--amber);}
+  tr.low td{background:#3a1020;}
+  input,select{background:var(--bg); border:2px solid var(--line); color:var(--cream);
+    padding:8px; font-size:15px; width:100%;}
+  button{background:var(--panel2); border:2px solid var(--line-hi); color:var(--cream);
+    padding:8px 16px; font-weight:bold; cursor:pointer; font-size:15px;}
+  button.danger{border-color:var(--red); color:#ff9c9c;}
+  button.small{padding:4px 10px; font-size:13px;}
+  .row{display:flex; gap:8px; align-items:center;}
+  .price{color:var(--amber); font-weight:bold; white-space:nowrap;}
+  .ok{color:var(--green);} .bad{color:var(--red);}
+  .muted{color:var(--gray); font-size:13px;}
+  img.thumb{width:64px; height:64px; object-fit:cover; border:2px solid var(--line);}
+  form.inline{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+  .flash{background:#123c22; border:2px solid var(--green); padding:10px; margin:10px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🕹️ باجه چیز — پنل مدیریت</h1>
+  {% if not hide_nav %}
+  <nav>
+    <a href="/admin" {% if nav=='home' %}class="active"{% endif %}>داشبورد</a>
+    <a href="/admin/products" {% if nav=='products' %}class="active"{% endif %}>محصولات</a>
+    <a href="/admin/orders" {% if nav=='orders' %}class="active"{% endif %}>سفارش‌ها</a>
+    <a href="/admin/reports" {% if nav=='reports' %}class="active"{% endif %}>گزارش</a>
+    <form method="post" action="/admin/logout" class="inline"><button class="small">خروج</button></form>
+  </nav>
+  {% endif %}
+  {% block body %}{% endblock %}
+</div>
+</body>
+</html>

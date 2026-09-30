@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set nav = 'reports' %}
+{% block body %}
+<div class="panel">
+  <h2>گزارش فروش</h2>
+  <div class="row">
+    <a href="/admin/reports?days=7"><button class="small">۷ روز</button></a>
+    <a href="/admin/reports?days=14"><button class="small">۱۴ روز</button></a>
+    <a href="/admin/reports?days=30"><button class="small">۳۰ روز</button></a>
+    <a href="/admin/reports/export.csv?days=30"><button class="small">⬇️ خروجی CSV</button></a>
+  </div>
+  <h3 style="margin-top:14px">فروش روزانه ({{ days }} روز)</h3>
+  <table>
+    <tr><th>روز</th><th>سفارش</th><th>فروش</th></tr>
+    {% for d in daily %}
+    <tr><td class="muted">{{ d.day }}</td><td>{{ d.orders }}</td>
+        <td class="price">{{ d.revenue|toman }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h3 style="margin-top:14px">پرفروش‌ها</h3>
+  <table>
+    <tr><th>محصول</th><th>تعداد</th><th>فروش</th></tr>
+    {% for t in top %}
+    <tr><td>{{ t.name }}</td><td>{{ t.qty }}</td>
+        <td class="price">{{ t.revenue|toman }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

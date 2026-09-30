@@ -62,11 +62,15 @@ CREATE INDEX IF NOT EXISTS idx_events_kind     ON events(kind);
 """
 
 
-def connect(db_path: Path | str) -> sqlite3.Connection:
-    """Open the booth database with sane pragmas."""
+def connect(db_path: Path | str, *, shared: bool = False) -> sqlite3.Connection:
+    """Open the booth database with sane pragmas.
+
+    shared=True allows the FastAPI threadpool to reuse one connection
+    (writes are serialized by busy_timeout + WAL).
+    """
     p = Path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(p))
+    conn = sqlite3.connect(str(p), check_same_thread=not shared)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
