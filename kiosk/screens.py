@@ -14,7 +14,7 @@ from core.config import DATA_DIR
 from core.fa import fa_digits
 from core.models import Product
 from hardware.input import slot_index
-from kiosk.theme import K, OFF_SM, arrow, burst, marker_dot, plate
+from kiosk.theme import K, OFF_SM, arrow, marker_dot, plate
 from kiosk.widgets import ProductCard, load_product_image, price_fa
 
 PER_PAGE = 6
@@ -81,14 +81,13 @@ class AttractScreen(Screen):
         t.stage(surf)
         cx = t.w // 2
 
-        # brand burst, gently bobbing
+        # brand logo, gently bobbing
         bob = int(round(5 * math.sin(self.t_ms / 600)))
-        by = 190 + bob
-        burst(surf, (cx, by), 150, K["hi"])
-        logo = t.text("چیز", "huge", K["ink"], "display")
-        surf.blit(logo, logo.get_rect(center=(cx, by + 10)))
-        t.title_box(surf, "باجه‌ی فروش", {"midtop": (cx, by + 118)}, "md",
-                    fill=K["paper"])
+        by = 180 + bob
+        logo = t.logo(250)
+        if logo is not None:
+            surf.blit(logo, logo.get_rect(center=(cx, by)))
+        t.title_box(surf, "باجه‌ی فروش", {"midtop": (cx, 318)}, "md")
 
         t.sticker(surf, "محصولات بازیافتی از تخته‌اسکیت‌های شکسته",
                   {"midtop": (cx, 398)}, size="xs")
@@ -126,7 +125,7 @@ class GridScreen(Screen):
     TOP = 84
     CARD_H = 170
     GAP_Y = 22
-    MARGIN_X = 28
+    MARGIN_X = 36
     GAP_X = 20
 
     def __init__(self, app) -> None:
@@ -280,19 +279,24 @@ class GridScreen(Screen):
         self._draw_action_bar(surf, t)
 
     def _draw_header(self, surf, t) -> None:
-        t.title_box(surf, "چیز", {"topright": (t.w - 20, 16)}, "lg")
-        t.kicker(surf, "باجه‌ی فروش", {"topright": (t.w - 112, 30)},
-                 color=K["alt_ink"], size="sm")
+        logo = t.logo(62)
+        right = t.w - 24
+        if logo is not None:
+            r = logo.get_rect(topright=(right, 14))
+            surf.blit(logo, r)
+            right = r.left - 10
+        t.kicker(surf, "باجه‌ی فروش", {"topright": (right, 30)},
+                 color=K["alt_ink"], marker=K["hi"], size="sm")
         if self.pages > 1:
             t.sticker(surf, f"صفحه {fa_digits(self.page + 1)} از {fa_digits(self.pages)}",
-                      {"topleft": (20, 24)}, size="xs")
+                      {"topleft": (28, 26)}, size="xs")
         else:
-            t.kicker(surf, "قیمت‌ها به تومان", {"topleft": (20, 30)},
+            t.kicker(surf, "قیمت‌ها به تومان", {"topleft": (28, 32)},
                      color=K["alt_ink"], size="xs")
 
     def _draw_action_bar(self, surf, t) -> None:
         bar_top = self.TOP + 12 + 3 * (self.CARD_H + self.GAP_Y) + 4
-        ticket = pygame.Rect(28, bar_top, t.w - 56, 64)
+        ticket = pygame.Rect(36, bar_top, t.w - 72, 64)
         if self.selected is not None:
             p = self.products[self.selected]
             t.go_ticket(surf, ticket, f"خرید {p.name}", "md",
@@ -308,9 +312,9 @@ class GridScreen(Screen):
             info = "بعد دکمه‌ی قرمز"
         # footer: info on the start side, the cancel hint over the real button
         foot_y = ticket.bottom + 20
-        t.kicker(surf, info, {"midright": (t.w - 28, foot_y)},
+        t.kicker(surf, info, {"midright": (t.w - 36, foot_y)},
                  color=K["alt_ink"], size="xs", marker=K["danger"], round_marker=True)
-        cancel = pygame.Rect(28, foot_y - 15, 112, 30)
+        cancel = pygame.Rect(36, foot_y - 15, 112, 30)
         plate(surf, cancel, K["paper"], shadow=OFF_SM)
         lab = t.text("انصراف" if self.selected is None else "بی‌خیال", "xs")
         surf.blit(lab, lab.get_rect(midright=(cancel.right - 10, cancel.centery)))
@@ -360,9 +364,10 @@ class ConfirmScreen(Screen):
         if self.image is not None:
             surf.blit(self.image, self.image.get_rect(center=img_box.center))
         else:
-            ph = t.text("چیز", "xl", K["line"], "display")
-            surf.blit(ph, ph.get_rect(center=img_box.center))
-        pygame.draw.rect(surf, K["ink"], img_box, 3)
+            ph = t.logo(120, alpha=90)
+            if ph is not None:
+                surf.blit(ph, ph.get_rect(center=img_box.center))
+        pygame.draw.rect(surf, K["ink"], img_box, 3, border_radius=10)
 
         y = img_box.bottom + 18
         name = t.fit_text(self.product.name, box.w - 60, ("lg", "md", "sm"))

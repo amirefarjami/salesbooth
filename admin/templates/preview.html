@@ -5,35 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>باجه چیز — نمای مانیتور</title>
 <style>
-  /* «کمیک قورمه» tokens — same values as kiosk/theme.py */
+  /* CHIZ brand tokens — same values as kiosk/theme.py */
   :root{
-    --ink:#1d1409; --paper:#fff6e0; --paper-2:#f6e4b8; --muted:#5a4a30;
-    --hi:#ffb800; --alt:#08767d; --stage:#06646a; --danger:#b3122d;
+    --ink:#2e2e33; --paper:#ffffff; --paper-2:#e4e9f4; --muted:#46507a;
+    --hi:#fff100; --alt:#7b3e95; --stage:#244085; --danger:#ec1f24;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--stage); color:var(--ink); font-family:"Vazirmatn",Tahoma,sans-serif;
     min-height:100vh; padding:28px 16px 60px;}
   h1{display:table; margin:0 auto; background:var(--hi); border:3px solid var(--ink);
-    box-shadow:4px 4px 0 var(--ink); padding:2px 22px; font-size:26px; transform:skewX(-8deg);}
+    box-shadow:4px 4px 0 var(--ink); padding:2px 22px; font-size:26px; border-radius:10px;}
   .sub{text-align:center; color:#fff; font-size:14px; margin:14px 0 30px;}
   .booth{display:flex; flex-direction:column; align-items:center; gap:34px;}
   /* the panel from the hand sketch: screen in the middle, 3 slot buttons per side */
   .frame{display:grid; grid-template-columns:44px 1fr 44px; gap:10px; align-items:stretch;
-    background:var(--paper); border:4px solid var(--ink); box-shadow:8px 8px 0 var(--ink);
+    background:var(--stage); border:10px solid var(--danger); border-radius:26px; outline:2px solid var(--ink); box-shadow:8px 8px 0 var(--ink);
     padding:16px 12px 14px; width:min(560px,100%);}
   .side{display:flex; flex-direction:column; justify-content:space-around; align-items:center;}
   .slotbtn{width:34px; height:34px; border-radius:50%; background:var(--alt);
     border:3px solid var(--ink); box-shadow:2px 2px 0 var(--ink);}
-  .screen-wrap{border:6px solid var(--ink); background:var(--ink);}
+  .screen-wrap{border:6px solid var(--ink); background:var(--ink); border-radius:8px; overflow:hidden;}
   .screen-wrap img{display:block; width:100%; height:auto;}
   .deck{grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between;
     gap:14px; padding:12px 4px 0;}
   .red{width:58px; height:58px; border-radius:50%; background:var(--danger);
     border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink);}
-  .cancel{background:var(--paper-2); border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
+  .cancel{border-radius:8px; background:var(--paper); border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
     padding:4px 14px; font-weight:800; font-size:13px;}
   .reader{width:110px; height:34px; border:3px dashed var(--muted); color:var(--muted);
-    display:flex; align-items:center; justify-content:center; font-size:11px;}
+    display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; border-color:#fff; border-radius:8px;}
   .caption{text-align:center; margin:12px 0 0; color:#fff; font-size:15px; font-weight:800;}
   .caption small{display:block; font-weight:400; font-size:12.5px; margin-top:4px; opacity:.9;}
   .num{display:inline-flex; width:26px; height:26px; border-radius:50%; background:var(--hi);
