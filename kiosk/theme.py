@@ -24,7 +24,7 @@ from core.fa import is_rtl, shape
 from core.config import ASSETS_DIR
 from core.fonts import FontPack
 
-LOGO_PATH = ASSETS_DIR / "img" / "chiz-logo.png"
+IMG_DIR = ASSETS_DIR / "img"
 
 
 def _hex(h: str) -> tuple[int, int, int]:
@@ -53,6 +53,8 @@ K = {
     "stage":        _hex("244085"),   # brand navy behind everything
     "stage_2":      _hex("2f4f9e"),
     "frame":        _hex("ec1f24"),   # the red rounded frame of the booth art
+    "burst_rim":    _hex("f7931e"),   # orange inner rim of the price burst
+    "poster":       _hex("b0901f"),   # sand of the posters (slide letterbox)
 }
 
 # geometry (px)
@@ -233,7 +235,7 @@ class Theme:
         self.h = h
         self.scanlines: pygame.Surface | None = None
         self._text_cache: dict[tuple, pygame.Surface] = {}
-        self._logo_src = None
+        self._images: dict[str, pygame.Surface | bool] = {}
 
     def build_scanlines(self, strength: int) -> pygame.Surface:
         self.scanlines = make_scanline_overlay(self.w, self.h, strength)
@@ -363,30 +365,68 @@ class Theme:
         surf.blit(t, t.get_rect(center=(r.centerx, r.centery + 2)))
         return r
 
-    def logo(self, height: int, alpha: int = 255) -> pygame.Surface | None:
-        """The CHIZ logo (assets/img/chiz-logo.png) scaled to `height`."""
-        key = ("__logo__", height, alpha)
+    def image(self, name: str, height: int | None = None, width: int | None = None,
+              alpha: int = 255) -> pygame.Surface | None:
+        """A brand asset from assets/img, scaled (cached). None if missing."""
+        key = ("__img__", name, height, width, alpha)
         surf = self._text_cache.get(key)
-        if surf is None:
-            if self._logo_src is None:
+        if surf is not None:
+            return surf
+        src = self._images.get(name)
+        if src is None:
+            try:
+                src = pygame.image.load(str(IMG_DIR / name))
                 try:
-                    src = pygame.image.load(str(LOGO_PATH))
-                    try:
-                        src = src.convert_alpha()
-                    except pygame.error:
-                        pass
-                    self._logo_src = src
-                except (pygame.error, FileNotFoundError):
-                    self._logo_src = False
-            if not self._logo_src:
-                return None
-            w, h = self._logo_src.get_size()
-            surf = pygame.transform.smoothscale(self._logo_src, (max(1, int(w * height / h)), height))
-            if alpha < 255:
-                surf = surf.copy()
-                surf.set_alpha(alpha)
-            self._text_cache[key] = surf
+                    src = src.convert_alpha() if name.endswith(".png") else src.convert()
+                except pygame.error:
+                    pass  # headless preview: no display format
+            except (pygame.error, FileNotFoundError):
+                src = False
+            self._images[name] = src
+        if not src:
+            return None
+        w, h = src.get_size()
+        if height and not width:
+            width = max(1, int(w * height / h))
+        elif width and not height:
+            height = max(1, int(h * width / w))
+        surf = src if not width else pygame.transform.smoothscale(src, (width, height))
+        if alpha < 255:
+            surf = surf.copy()
+            surf.set_alpha(alpha)
+        self._text_cache[key] = surf
         return surf
+
+    def logo(self, height: int, alpha: int = 255) -> pygame.Surface | None:
+        """The planet logo (assets/img/chiz-logo.png) scaled to `height`."""
+        return self.image("chiz-logo.png", height=height, alpha=alpha)
+
+    def price_burst(self, surf, center, label: str, w: int, h: int,
+                    size: str = "sm", seed: int = 0) -> pygame.Rect:
+        """Comic price burst from the brand art: jagged yellow star with an
+        orange inner rim and a red outer rim, ink digits in the middle."""
+        cx, cy = center
+        rnd = [0.82, 1.0, 0.86, 0.97, 0.8, 1.0, 0.9, 0.95, 0.83, 1.0, 0.88, 0.96, 0.84, 0.99]
+        n = len(rnd)
+
+        def pts(grow: float) -> list:
+            out = []
+            for i in range(n * 2):
+                a = -math.pi / 2 + i * math.pi / n + 0.1
+                if i % 2 == 0:
+                    k = rnd[(i // 2 + seed) % n]
+                    rx, ry = w / 2 * k + grow, h / 2 * k + grow
+                else:
+                    rx, ry = w / 2 * 0.72 + grow * 0.7, h / 2 * 0.62 + grow * 0.7
+                out.append((cx + rx * math.cos(a), cy + ry * math.sin(a)))
+            return out
+        pygame.draw.polygon(surf, K["ink"], [(x + 3, y + 3) for x, y in pts(3)])
+        pygame.draw.polygon(surf, K["danger"], pts(3))
+        pygame.draw.polygon(surf, K["burst_rim"], pts(0))
+        pygame.draw.polygon(surf, K["hi"], pts(-3))
+        t = self.fit_text(label, int(w * 0.66), (size, "sm", "xs"), K["ink"], "display")
+        surf.blit(t, t.get_rect(center=(cx, cy + 2)))
+        return pygame.Rect(cx - w // 2, cy - h // 2, w, h)
 
     def close_x(self, surf, rect: pygame.Rect) -> None:
         """.k-modal-x: pomegranate square with a white ×."""

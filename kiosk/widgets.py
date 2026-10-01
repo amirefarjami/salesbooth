@@ -8,7 +8,7 @@ import pygame
 
 from core.fa import fa_digits
 from core.models import Product
-from kiosk.theme import K, W, burst, marker_dot, plate, selected_card
+from kiosk.theme import K, RADIUS_SM, W, burst, plate, selected_card
 
 
 def price_fa(amount: int) -> str:
@@ -73,14 +73,13 @@ class ProductCard:
                           K["muted"] if self.sold_out else K["ink"])
         surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 3)))
 
-        # price sticker on the top tab (start = right edge) -------------
+        # price: comic burst on the top corner (start = right edge) ---
         if self.sold_out:
             t.sticker(surf, "تمام شد", {"topright": (r.right - 8, r.top - 12)},
                       fill=K["paper"], color=K["danger"], border=K["danger"], size="xs")
         else:
-            t.sticker(surf, price_fa(self.product.price_toman),
-                      {"topright": (r.right - 8, r.top - 12)},
-                      fill=K["hi"] if not self.selected else K["paper"], size="sm")
+            t.price_burst(surf, (r.right - 44, r.top + 2), price_fa(self.product.price_toman),
+                          104, 54, "sm", seed=self.slot)
 
         # low-stock burst («فقط ۲ تا») ---------------------------------
         if 0 < self.product.stock <= 2:
@@ -89,12 +88,25 @@ class ProductCard:
             lab = t.text(f"{fa_digits(self.product.stock)} تا", "xs", K["danger_ink"])
             surf.blit(lab, lab.get_rect(center=(c[0], c[1] + 1)))
 
-        # slot marker on the outer edge, pointing at its button -------
+        # slot tag «#۱» (the hang-tag numbering) on the outer edge,
+        # pointing at its physical button
         mx = r.right if self.side == "right" else r.left
         my = r.centery - 6
-        marker_dot(surf, (mx, my), 15, K["muted"] if self.sold_out else K["alt"])
-        num = t.text(fa_digits(self.slot), "sm", K["alt_ink"])
-        surf.blit(num, num.get_rect(center=(mx, my + 1)))
+        slot_tag(surf, t, (mx, my), self.slot, muted=self.sold_out)
+
+
+def slot_tag(surf, t, center, n: int, muted: bool = False) -> pygame.Rect:
+    """Purple rounded tag with «#n» in the style of the CHIZ hang tags."""
+    num = t.text(fa_digits(n), "md", K["alt_ink"], "display")
+    hash_ = t.text("#", "sm", K["alt_ink"], "display")
+    w = num.get_width() + hash_.get_width() + 16
+    tag = pygame.Rect(0, 0, max(42, w), 32)
+    tag.center = center
+    plate(surf, tag, K["muted"] if muted else K["alt"], shadow=2, radius=RADIUS_SM)
+    x = tag.centerx - (num.get_width() + hash_.get_width() + 2) // 2
+    surf.blit(hash_, hash_.get_rect(midleft=(x, tag.centery + 1)))
+    surf.blit(num, num.get_rect(midleft=(x + hash_.get_width() + 2, tag.centery + 3)))
+    return tag
 
 
 def _greyed(img: pygame.Surface) -> pygame.Surface:
@@ -147,4 +159,4 @@ class Modal:
         return surf
 
 
-__all__ = ["ProductCard", "Modal", "load_product_image", "price_fa", "W"]
+__all__ = ["ProductCard", "slot_tag", "Modal", "load_product_image", "price_fa", "W"]

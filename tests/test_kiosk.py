@@ -161,3 +161,13 @@ def test_shutdown_cancels_pending_and_locks(app):
         assert next(p.stock for p in b.products.list_all() if p.name == "الف") == 3
     finally:
         b.close()
+
+
+def test_attract_cycles_brand_and_posters(app):
+    a = app.current
+    assert a.SLIDES[a.slide][0] == "brand"
+    app.step(9_100)
+    assert a.SLIDES[a.slide][0].startswith("poster")
+    app.step(16)                      # poster slide draws
+    app.step(16, ["slot4"])           # any button still starts shopping
+    assert app.current_name == "grid" and app.current.selected == 3
