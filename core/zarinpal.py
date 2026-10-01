@@ -112,9 +112,6 @@ class ZarinpalProvider(PaymentProvider):
 
 
 def provider_from_config(booth):
-    from core.config import Config
-    cfg = booth.config
-    if (cfg.payment_provider or "").lower() == "zarinpal":
-        return ZarinpalProvider(cfg.zarinpal_merchant_id, cfg.zarinpal_sandbox)
-    from core.payment import ManualProvider
-    return ManualProvider(booth)
+    """Kept for old imports; the single source is core.payment."""
+    from core.payment import provider_from_config as _pfc
+    return _pfc(booth)

@@ -1,13 +1,13 @@
 # CHIZ Booth — optional config file.
 # Copy to booth.toml and edit. Every key is optional; env vars CHIZ_* win.
-# On the Pi kiosk, set  fullscreen = true  and  scanlines = true .
+# On the Pi kiosk, set  fullscreen = true .
 
 [booth]
 screen_w = 480
 screen_h = 800
 fullscreen = false
 fps = 60
-scanlines = true
+scanlines = false        # flat «کمیک قورمه» look
 scanline_strength = 32
 
 attract_timeout_s = 60
@@ -35,10 +35,26 @@ payment_timeout_s = 180
 
 order_ttl_minutes = 30
 
+# showcase door (solenoid via relay): opens after payment, then re-locks
+lock_enabled = true
+lock_gpio = 17
+lock_active_high = true
+door_open_s = 20      # 15-25 s per the design brief
+door_warn_s = 5       # last seconds: lights dim, red light + alarm
+
+# USB encoder keymap: key names ("1", "return", "f5") or raw key codes.
+# slot1..slot6 = the three buttons each side of the screen (RTL order:
+# 1 right-top, 2 left-top, 3 right-mid, 4 left-mid, 5 right-bottom, 6 left-bottom)
 [booth.keymap]
-up = "up"
+slot1 = "1"
+slot2 = "2"
+slot3 = "3"
+slot4 = "4"
+slot5 = "5"
+slot6 = "6"
+confirm = "return"   # big red button
+cancel = "escape"    # «انصراف» under the screen
+up = "up"            # optional page buttons / old joystick
 down = "down"
 left = "left"
 right = "right"
-confirm = "return"
-cancel = "escape"

@@ -37,18 +37,19 @@ class SoundEngine:
     def load(self) -> None:
         if not self.ok:
             return
-        synth = {
-            "move": self._sfx_move,
-            "select": self._sfx_select,
-            "back": self._sfx_back,
-            "coin": self._sfx_coin,
-            "success": self._sfx_success,
-            "error": self._sfx_error,
-            "boot": self._sfx_boot,
+        synth = {   # name: (generator, seconds)
+            "move": (self._sfx_move, 0.06),
+            "select": (self._sfx_select, 0.18),
+            "back": (self._sfx_back, 0.12),
+            "coin": (self._sfx_coin, 0.45),
+            "success": (self._sfx_success, 0.6),
+            "error": (self._sfx_error, 0.35),
+            "boot": (self._sfx_boot, 0.4),
+            "alarm": (self._sfx_alarm, 0.3),
         }
-        for name, fn in synth.items():
+        for name, (gen, dur) in synth.items():
             try:
-                self._sounds[name] = fn()
+                self._sounds[name] = self._make(gen, dur)
             except pygame.error:
                 continue
 
@@ -93,6 +94,12 @@ class SoundEngine:
         f = 220 + 440 * p * p
         env = 0.9 - 0.4 * p
         return 0.4 * env * math.sin(2 * math.pi * f * t)
+
+    def _sfx_alarm(self, t, p):
+        # two-tone square-ish beep for the closing showcase door
+        f = 880 if t < 0.12 else 660
+        sq = 1.0 if math.sin(2 * math.pi * f * t) >= 0 else -1.0
+        return 0.35 * sq * (1.0 - p) ** 0.5
 
     # --- API ---
 

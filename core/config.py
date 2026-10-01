@@ -35,7 +35,8 @@ class Config:
     screen_h: int = 800
     fullscreen: bool = False          # True on the Pi kiosk (via --fullscreen)
     fps: int = 60
-    scanlines: bool = True            # CRT scanline overlay
+    scanlines: bool = False           # CRT scanline overlay (off: the
+                                      # «کمیک قورمه» look is flat paper)
     scanline_strength: int = 32       # 0-255 alpha for the dark lines
 
     # --- attract mode ---
@@ -76,14 +77,20 @@ class Config:
     # --- orders ---
     order_ttl_minutes: int = 30       # pending orders older than this expire
 
-    # --- hardware buttons (USB encoder keymap) ---
+    # --- door lock (solenoid behind the glass, via relay) ---
+    lock_enabled: bool = True         # auto-simulated when no GPIO lib
+    lock_gpio: int = 17               # BCM pin driving the relay
+    lock_active_high: bool = True     # relay board polarity
+    door_open_s: int = 20             # unlock window after payment (15-25)
+    door_warn_s: int = 5              # last N seconds: red light + alarm
+
+    # --- hardware buttons (USB encoder keymap: key names or codes) ---
     keymap: dict = field(default_factory=lambda: {
-        "up": pygame_keyname_to_code("up"),
-        "down": pygame_keyname_to_code("down"),
-        "left": pygame_keyname_to_code("left"),
-        "right": pygame_keyname_to_code("right"),
-        "confirm": pygame_keyname_to_code("return"),
-        "cancel": pygame_keyname_to_code("escape"),
+        "slot1": "1", "slot2": "2", "slot3": "3",
+        "slot4": "4", "slot5": "5", "slot6": "6",
+        "confirm": "return",
+        "cancel": "escape",
+        "up": "up", "down": "down", "left": "left", "right": "right",
     })
 
     # --- runtime flags (not user-facing) ---
@@ -91,15 +98,9 @@ class Config:
 
 
 def pygame_keyname_to_code(name: str) -> int:
-    """Map a pygame key name to its scancode constant without importing pygame."""
-    # Keep this dependency-light: constants match pygame.constants.
-    codes = {
-        "up": 273, "down": 274, "left": 276, "right": 275,
-        "return": 13, "escape": 27, "space": 32,
-        "w": 119, "s": 115, "a": 97, "d": 100,
-        "enter": 13, "backspace": 8,
-    }
-    return codes.get(name.lower(), 0)
+    """Kept for old callers: key name -> pygame-ce key code."""
+    from hardware.input import key_code
+    return key_code(name)
 
 
 def _apply_file(cfg: Config, path: Path) -> None:
@@ -133,7 +134,7 @@ def _apply_file(cfg: Config, path: Path) -> None:
         elif isinstance(cur, dict):
             merged = dict(cur)
             if isinstance(val, dict):
-                merged.update({str(k): int(v) for k, v in val.items()})
+                merged.update({str(k): v for k, v in val.items()})
             val = merged
         try:
             setattr(cfg, f.name, val)

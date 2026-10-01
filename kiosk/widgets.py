@@ -1,4 +1,4 @@
-"""CHIZ Booth — kiosk UI widgets (button, product card, modal)."""
+"""CHIZ Booth — kiosk widgets in the «کمیک قورمه» look."""
 from __future__ import annotations
 
 import os
@@ -6,98 +6,106 @@ from pathlib import Path
 
 import pygame
 
-from core.fa import fa_digits, shape
-from core.format import format_toman
+from core.fa import fa_digits
 from core.models import Product
+from kiosk.theme import K, W, burst, marker_dot, plate, selected_card
 
 
-class Widget:
-    def __init__(self, rect: pygame.Rect) -> None:
-        self.rect = rect
-
-    def draw(self, surf: pygame.Surface) -> None:  # pragma: no cover
-        raise NotImplementedError
+def price_fa(amount: int) -> str:
+    """150000 -> '۱۵۰٬۰۰۰' (Persian digits + Arabic thousands separator)."""
+    return fa_digits(f"{int(amount):,}".replace(",", "٬"))
 
 
-class TextButton(Widget):
-    """Chunky retro button with pressed/selected states."""
+class ProductCard:
+    """One product slot on the 2×3 grid.
 
-    def __init__(self, rect: pygame.Rect, label_fa: str = "",
-                 label_px: str = "", theme=None,
-                 fill=(22, 28, 68), accent=(140, 160, 255),
-                 text_color=(255, 240, 200), font_size: str = "md",
-                 px_size: str = "sm") -> None:
-        super().__init__(rect)
-        self.label_fa = label_fa
-        self.label_px = label_px
-        self.theme = theme
-        self.fill = fill
-        self.accent = accent
-        self.text_color = text_color
-        self.font_size = font_size
-        self.px_size = px_size
-        self.selected = False
-        self.offset = 0
-
-    def draw(self, surf: pygame.Surface) -> None:
-        r = self.rect.move(0, self.offset)
-        fill = self.fill
-        border = self.accent
-        if self.selected:
-            fill = tuple(min(255, int(c * 1.35)) for c in self.fill)
-            border = (255, 220, 120)
-        pygame.draw.rect(surf, (10, 12, 34), r.move(0, 4))  # drop shadow
-        pygame.draw.rect(surf, fill, r)
-        pygame.draw.rect(surf, border, r, 3 if self.selected else 2)
-        if self.theme:
-            f = self.theme.fonts.fa(self.font_size, True) if self.label_fa else self.theme.fonts.px(self.px_size)
-            label = shape(self.label_fa) if self.label_fa else self.label_px
-            tsurf = f.render(label, True, self.text_color)
-            surf.blit(tsurf, tsurf.get_rect(center=r.center))
-
-
-class ProductCard(Widget):
-    """Selectable product tile with pixel frame, photo, name and price."""
+    Layout (from the hand sketch): photo on paper, the name under an ink
+    hairline, a price sticker on a tab poking out of the top corner, a
+    turquoise numbered dot on the OUTER edge pointing at the physical slot
+    button beside the screen, and a red burst when stock is low.
+    """
 
     def __init__(self, product: Product, rect: pygame.Rect, theme,
-                 image: pygame.Surface | None = None) -> None:
-        super().__init__(rect)
+                 slot: int, side: str, image: pygame.Surface | None = None) -> None:
         self.product = product
+        self.rect = rect
         self.theme = theme
+        self.slot = slot          # 1-based number printed on the marker
+        self.side = side          # "right" | "left": which edge faces its button
         self.image = image
         self.selected = False
+        self.flash = 0.0          # 0..1 press feedback (sinks the card)
+
+    @property
+    def sold_out(self) -> bool:
+        return self.product.stock <= 0
 
     def draw(self, surf: pygame.Surface) -> None:
-        r = self.rect
         t = self.theme
-        frame = (255, 210, 90) if self.selected else (86, 104, 200)
-        bg = (30, 38, 92) if self.selected else (18, 24, 58)
-        pygame.draw.rect(surf, (8, 10, 26), r.move(0, 5))
-        pygame.draw.rect(surf, bg, r)
-        pygame.draw.rect(surf, frame, r, 3 if self.selected else 2)
+        sink = int(round(3 * self.flash))
+        r = self.rect.move(sink, sink)
 
-        # image area
-        img_rect = pygame.Rect(r.x + 10, r.y + 10, r.w - 20, r.h - 62)
-        if self.image is not None:
-            scaled = pygame.transform.smoothscale(
-                self.image, (img_rect.w, img_rect.h))
-            surf.blit(scaled, img_rect)
+        if self.sold_out:
+            plate(surf, r, K["paper_2"], shadow=0, dashed=True, border=K["muted"])
+        elif self.selected:
+            selected_card(surf, r)
         else:
-            placeholder = t.fonts.fa("xl").render("چیز", True, (90, 100, 160))
-            surf.blit(placeholder, placeholder.get_rect(center=img_rect.center))
-        pygame.draw.rect(surf, (60, 72, 140), img_rect, 2)
+            plate(surf, r, K["paper"], shadow=4 - sink)
 
-        # name + price
-        f_name = t.fonts.fa("sm")
-        name_s = f_name.render(shape(self.product.name), True, (255, 240, 200))
-        surf.blit(name_s, name_s.get_rect(midtop=(r.centerx, r.bottom - 46)))
-        f_price = t.fonts.px("sm")
-        price_s = f_price.render(fa_digits(f"{self.product.price_toman:,}"), True,
-                                 (255, 196, 60))
-        surf.blit(price_s, price_s.get_rect(midbottom=(r.centerx, r.bottom - 12)))
-        f_cur = t.fonts.fa("xs")
-        cur_s = f_cur.render(shape("تومان"), True, (150, 160, 200))
-        surf.blit(cur_s, (r.right - 14 - cur_s.get_width(), r.bottom - 32))
+        # photo window (ink frame) -------------------------------------
+        name_h = 38
+        img_rect = pygame.Rect(r.x + 10, r.y + 22, r.w - 20, r.h - 22 - name_h - 8)
+        pygame.draw.rect(surf, K["paper_2"] if not self.selected else K["paper"], img_rect)
+        if self.image is not None:
+            img = self.image
+            if self.sold_out:
+                img = _greyed(img)
+            surf.blit(img, img.get_rect(center=img_rect.center))
+        else:
+            ph = t.text("چیز", "lg", K["line"], "display")
+            surf.blit(ph, ph.get_rect(center=img_rect.center))
+        pygame.draw.rect(surf, K["ink"], img_rect, 2)
+
+        # name under an ink hairline (no dark strip behind text) ------
+        line_y = r.bottom - name_h - 3
+        pygame.draw.line(surf, K["ink"], (r.x + 10, line_y), (r.right - 11, line_y), 2)
+        name = t.fit_text(self.product.name, r.w - 24, ("sm", "xs"),
+                          K["muted"] if self.sold_out else K["ink"])
+        surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 3)))
+
+        # price sticker on the top tab (start = right edge) -------------
+        if self.sold_out:
+            t.sticker(surf, "تمام شد", {"topright": (r.right - 8, r.top - 12)},
+                      fill=K["paper"], color=K["danger"], border=K["danger"], size="xs")
+        else:
+            t.sticker(surf, price_fa(self.product.price_toman),
+                      {"topright": (r.right - 8, r.top - 12)},
+                      fill=K["hi"] if not self.selected else K["paper"], size="sm")
+
+        # low-stock burst («فقط ۲ تا») ---------------------------------
+        if 0 < self.product.stock <= 2:
+            c = (r.left + 30, r.top + 28)
+            burst(surf, c, 25, K["danger"])
+            lab = t.text(f"{fa_digits(self.product.stock)} تا", "xs", K["danger_ink"])
+            surf.blit(lab, lab.get_rect(center=(c[0], c[1] + 1)))
+
+        # slot marker on the outer edge, pointing at its button -------
+        mx = r.right if self.side == "right" else r.left
+        my = r.centery - 6
+        marker_dot(surf, (mx, my), 15, K["muted"] if self.sold_out else K["alt"])
+        num = t.text(fa_digits(self.slot), "sm", K["alt_ink"])
+        surf.blit(num, num.get_rect(center=(mx, my + 1)))
+
+
+def _greyed(img: pygame.Surface) -> pygame.Surface:
+    try:
+        g = pygame.transform.grayscale(img)
+    except AttributeError:  # very old pygame
+        g = img.copy()
+    veil = pygame.Surface(g.get_size(), pygame.SRCALPHA)
+    veil.fill((*K["paper_2"], 120))
+    g.blit(veil, (0, 0))
+    return g
 
 
 def load_product_image(data_dir, image_path: str | None,
@@ -105,38 +113,38 @@ def load_product_image(data_dir, image_path: str | None,
     if not image_path:
         return None
     p = image_path if os.path.isabs(image_path) else (Path(data_dir) / image_path)
-    if not p.is_file():
+    if not Path(p).is_file():
         return None
     try:
-        img = pygame.image.load(str(p)).convert()
+        img = pygame.image.load(str(p))
     except pygame.error:
         return None
+    try:
+        img = img.convert_alpha() if img.get_alpha() is not None else img.convert()
+    except pygame.error:
+        pass  # no display yet (headless preview render) — use as loaded
     return _fit(img, max_w, max_h)
 
 
 def _fit(img: pygame.Surface, max_w: int, max_h: int) -> pygame.Surface:
     w, h = img.get_size()
-    scale = min(max_w / w, max_h / h, 1.0)
-    if scale < 1.0:
+    scale = min(max_w / w, max_h / h)
+    if abs(scale - 1.0) > 0.01:
         img = pygame.transform.smoothscale(
-            img, (int(w * scale), int(h * scale)))
+            img, (max(1, int(w * scale)), max(1, int(h * scale))))
     return img
 
 
 class Modal:
-    """Dimmed full-screen modal box."""
+    """Paper modal on the flat stage (kept for older callers)."""
 
     def __init__(self, theme, rect: pygame.Rect) -> None:
         self.theme = theme
         self.rect = rect
 
-    def draw_frame(self, surf: pygame.Surface,
-                   dim_alpha: int = 180) -> pygame.Surface:
-        dim = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
-        dim.fill((0, 0, 10, dim_alpha))
-        surf.blit(dim, (0, 0))
-        r = self.rect
-        pygame.draw.rect(surf, (8, 10, 26), r.move(0, 6))
-        pygame.draw.rect(surf, (22, 28, 68), r)
-        pygame.draw.rect(surf, (255, 210, 90), r, 3)
+    def draw_frame(self, surf: pygame.Surface, dim_alpha: int = 0) -> pygame.Surface:
+        self.theme.modal(surf, self.rect)
         return surf
+
+
+__all__ = ["ProductCard", "Modal", "load_product_image", "price_fa", "W"]

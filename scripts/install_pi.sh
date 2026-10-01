@@ -17,7 +17,8 @@ sudo apt-get update -y
 sudo apt-get install -y \
   python3-venv python3-pip python3-pygame \
   avahi-daemon \
-  libsdl2-mixer-2.0-0 libsdl2-ttf-2.0-0 \
+  libsdl2-2.0-0 libsdl2-mixer-2.0-0 libsdl2-ttf-2.0-0 \
+  python3-lgpio \
   network-manager
 
 # 2) python venv + deps ----------------------------------------------------
@@ -42,17 +43,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now chiz-admin
 sudo systemctl enable --now chiz-kiosk
 
-# 5) kiosk boot tweaks: auto-login on tty1 not needed (fbcon service),
-#    but silence HDMI blanking so the screen stays on:
-if ! grep -q "chiz-kiosk-blanking" "$BOOT_CFG" 2>/dev/null; then
-  sudo tee -a "$BOOT_CFG" >/dev/null <<'EOF'
-
-# chiz-kiosk-blanking: keep HDMI alive for kiosk display
-disable_overscan=1
-hdmi_blanking=1
-EOF
-  echo "boot config updated (reboot needed)"
+# 5) kiosk boot tweaks: keep the screen on (no console blanking) and let
+#    the kiosk user reach the display, input and GPIO devices.
+#    (hdmi_blanking=1 in config.txt does the opposite: it ALLOWS blanking.)
+CMDLINE=/boot/firmware/cmdline.txt
+[ -f "$CMDLINE" ] || CMDLINE=/boot/cmdline.txt
+if [ -f "$CMDLINE" ] && ! grep -q "consoleblank=0" "$CMDLINE"; then
+  sudo sed -i '1 s/$/ consoleblank=0/' "$CMDLINE"
+  echo "cmdline: consoleblank=0 (reboot needed)"
 fi
+sudo sed -i '/chiz-kiosk-blanking/,+2d' "$BOOT_CFG" 2>/dev/null || true
+sudo usermod -aG video,render,input,audio,gpio "$(id -un)" || true
 
 # 6) temperature guard: log throttling; fan is wired to 5V/GPIO via MOSFET
 #    (see docs/wiring.md). dtoverlay for PWM fan on GPIO 14 if desired:
