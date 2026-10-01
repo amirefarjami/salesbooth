@@ -9,9 +9,12 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
+# draw straight to the display without X/Wayland (SDL2: kmsdrm; the old
+# SDL1 "fbcon" driver does not exist in pygame 2 and the UI never opened)
+SupplementaryGroups=video render input audio gpio
 WorkingDirectory=/home/pi/salesbooth
-Environment=SDL_VIDEODRIVER=fbcon
-Environment=SDL_FBDEV=/dev/fb0
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=SDL_AUDIODRIVER=alsa
 Environment=CHIZ_FULLSCREEN=1
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/pi/salesbooth/.venv/bin/python -m kiosk.app

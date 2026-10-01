@@ -83,7 +83,13 @@ class FreeProvider(PaymentProvider):
 
 
 def provider_from_config(booth) -> PaymentProvider:
+    """manual | free | zarinpal (from config.payment_provider)."""
     kind = (booth.config.payment_provider or "manual").lower()
     if kind == "free":
         return FreeProvider()
+    if kind == "zarinpal":
+        from core.zarinpal import ZarinpalProvider  # lazy: imports httpx
+
+        cfg = booth.config
+        return ZarinpalProvider(cfg.zarinpal_merchant_id, cfg.zarinpal_sandbox)
     return ManualProvider(booth)
