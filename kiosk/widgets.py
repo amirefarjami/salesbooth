@@ -55,20 +55,20 @@ class ProductCard:
         # photo window (ink frame) -------------------------------------
         name_h = 38
         img_rect = pygame.Rect(r.x + 10, r.y + 22, r.w - 20, r.h - 22 - name_h - 8)
-        pygame.draw.rect(surf, K["paper_2"] if not self.selected else K["paper"], img_rect)
+        pygame.draw.rect(surf, K["paper_2"] if not self.selected else K["paper"], img_rect,
+                         border_radius=6)
         if self.image is not None:
             img = self.image
             if self.sold_out:
                 img = _greyed(img)
             surf.blit(img, img.get_rect(center=img_rect.center))
         else:
-            ph = t.text("چیز", "lg", K["line"], "display")
-            surf.blit(ph, ph.get_rect(center=img_rect.center))
-        pygame.draw.rect(surf, K["ink"], img_rect, 2)
+            ph = t.logo(min(64, img_rect.h - 16), alpha=90)
+            if ph is not None:
+                surf.blit(ph, ph.get_rect(center=img_rect.center))
+        pygame.draw.rect(surf, K["ink"], img_rect, 2, border_radius=6)
 
-        # name under an ink hairline (no dark strip behind text) ------
-        line_y = r.bottom - name_h - 3
-        pygame.draw.line(surf, K["ink"], (r.x + 10, line_y), (r.right - 11, line_y), 2)
+        # name ---------------------------------------------------------
         name = t.fit_text(self.product.name, r.w - 24, ("sm", "xs"),
                           K["muted"] if self.sold_out else K["ink"])
         surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 3)))

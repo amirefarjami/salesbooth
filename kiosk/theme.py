@@ -1,4 +1,4 @@
-"""CHIZ Booth — «کمیک قورمه» (Comic Ghormeh) theme for the kiosk screen.
+"""CHIZ Booth — «کمیک قورمه» (Comic Ghormeh) theme in the CHIZ brand colours.
 
 A Pygame port of the Team Arena menu kit (team-arena docs/UI-KIT.md,
 client/src/styles/kd.css), so the booth and the game share one look:
@@ -21,7 +21,10 @@ import math
 import pygame
 
 from core.fa import is_rtl, shape
+from core.config import ASSETS_DIR
 from core.fonts import FontPack
+
+LOGO_PATH = ASSETS_DIR / "img" / "chiz-logo.png"
 
 
 def _hex(h: str) -> tuple[int, int, int]:
@@ -29,29 +32,31 @@ def _hex(h: str) -> tuple[int, int, int]:
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
-# Tokens (same names/values as kd.css :root, minus the "--k-" prefix)
+# Tokens. Structure and names follow kd.css; the colours are the CHIZ
+# brand (logo + booth art): navy stage, red frame, yellow, purple, white
+# sticker plates and the logo's dark outline.
 K = {
-    "ink":          _hex("1d1409"),
-    "paper":        _hex("fff6e0"),
-    "paper_2":      _hex("f6e4b8"),
-    "muted":        _hex("5a4a30"),
-    "hi":           _hex("ffb800"),
-    "hi_2":         _hex("ffe7a1"),
-    "hover":        _hex("ffc83a"),
-    "alt":          _hex("08767d"),
+    "ink":          _hex("2e2e33"),   # logo outline: lines, shadows, text
+    "paper":        _hex("ffffff"),   # sticker-white plates
+    "paper_2":      _hex("e4e9f4"),   # sunken / disabled (navy-tinted)
+    "muted":        _hex("46507a"),   # secondary text on white (7.6:1)
+    "hi":           _hex("fff100"),   # brand yellow: selection, main action
+    "hi_2":         _hex("fff8a8"),   # selected card fill
+    "hover":        _hex("ffe600"),
+    "alt":          _hex("7b3e95"),   # brand purple: markers, rings
     "alt_ink":      _hex("ffffff"),
-    "danger":       _hex("b3122d"),
+    "danger":       _hex("ec1f24"),   # brand red: frame, red button, errors
     "danger_ink":   _hex("ffffff"),
-    "danger_edge":  _hex("7a0a1e"),
-    "ok":           _hex("0a6a30"),
-    "line":         _hex("c4b796"),   # --k-line (28% ink) pre-blended on paper
-    # stage behind the paper cards (turquoise, one step darker than --k-alt
-    # so the turquoise slot markers still read against it)
-    "stage":        _hex("06646a"),
-    "stage_2":      _hex("0a7f86"),
+    "danger_edge":  _hex("a5121a"),
+    "ok":           _hex("0a7a3a"),
+    "line":         _hex("c3cad9"),
+    "stage":        _hex("244085"),   # brand navy behind everything
+    "stage_2":      _hex("2f4f9e"),
+    "frame":        _hex("ec1f24"),   # the red rounded frame of the booth art
 }
 
 # geometry (px)
+RADIUS, RADIUS_SM, RADIUS_LG = 10, 6, 16   # rounded like the booth art
 W, W_SM, W_LG = 3, 2, 4          # outline: normal / chip / modal frame
 OFF, OFF_SM, OFF_LG = 4, 3, 8    # hard shadow offset: card / small / modal
 
@@ -80,16 +85,16 @@ def lerp_color(c1, c2, t: float):
 
 def plate(surf: pygame.Surface, rect: pygame.Rect, fill=K["paper"],
           outline: int = W, shadow: int = OFF, border=K["ink"],
-          dashed: bool = False) -> None:
-    """Paper plate: hard ink shadow, fill, ink outline (the .k-card recipe)."""
+          dashed: bool = False, radius: int = RADIUS) -> None:
+    """Sticker plate: hard ink shadow, fill, ink outline, rounded corners."""
     if shadow:
-        pygame.draw.rect(surf, K["ink"], rect.move(shadow, shadow))
-    pygame.draw.rect(surf, fill, rect)
+        pygame.draw.rect(surf, K["ink"], rect.move(shadow, shadow), border_radius=radius)
+    pygame.draw.rect(surf, fill, rect, border_radius=radius)
     if outline:
-        if dashed:
-            dashed_rect(surf, rect, border, outline)
+        if dashed:   # disabled: thin muted outline (dashes fight the radius)
+            pygame.draw.rect(surf, border, rect, 2, border_radius=radius)
         else:
-            pygame.draw.rect(surf, border, rect, outline)
+            pygame.draw.rect(surf, border, rect, outline, border_radius=radius)
 
 
 def dashed_rect(surf, rect: pygame.Rect, color, width: int = W,
@@ -104,12 +109,13 @@ def dashed_rect(surf, rect: pygame.Rect, color, width: int = W,
 
 
 def selected_card(surf, rect: pygame.Rect) -> None:
-    """.k-card.is-selected: hi-2 fill, saffron ring standing 2px off, 7px drop."""
-    ring = rect.inflate(12, 12)
-    pygame.draw.rect(surf, K["ink"], rect.move(7, 7))
-    pygame.draw.rect(surf, K["hi"], ring, 4)
-    pygame.draw.rect(surf, K["hi_2"], rect)
-    pygame.draw.rect(surf, K["ink"], rect, W)
+    """Selected card: light-yellow fill, yellow ring standing off, 7px drop."""
+    ring = rect.inflate(14, 14)
+    pygame.draw.rect(surf, K["ink"], rect.move(7, 7), border_radius=RADIUS)
+    pygame.draw.rect(surf, K["ink"], ring.inflate(4, 4), 2, border_radius=RADIUS + 7)
+    pygame.draw.rect(surf, K["hi"], ring, 5, border_radius=RADIUS + 6)
+    pygame.draw.rect(surf, K["hi_2"], rect, border_radius=RADIUS)
+    pygame.draw.rect(surf, K["ink"], rect, W, border_radius=RADIUS)
 
 
 def skew_box(surf, rect: pygame.Rect, fill=K["hi"], slant: int = 8,
@@ -227,6 +233,7 @@ class Theme:
         self.h = h
         self.scanlines: pygame.Surface | None = None
         self._text_cache: dict[tuple, pygame.Surface] = {}
+        self._logo_src = None
 
     def build_scanlines(self, strength: int) -> pygame.Surface:
         self.scanlines = make_scanline_overlay(self.w, self.h, strength)
@@ -309,9 +316,9 @@ class Theme:
         r = pygame.Rect(0, 0, t.get_width() + pad_x * 2, t.get_height() + pad_y * 2)
         for k, v in anchor.items():
             setattr(r, k, v)
-        pygame.draw.rect(surf, K["ink"], r.move(2, 2))
-        pygame.draw.rect(surf, fill, r)
-        pygame.draw.rect(surf, border, r, W_SM)
+        pygame.draw.rect(surf, K["ink"], r.move(2, 2), border_radius=RADIUS_SM)
+        pygame.draw.rect(surf, fill, r, border_radius=RADIUS_SM)
+        pygame.draw.rect(surf, border, r, W_SM, border_radius=RADIUS_SM)
         surf.blit(t, t.get_rect(center=r.center))
         return r
 
@@ -346,15 +353,40 @@ class Theme:
         return y + 9
 
     def title_box(self, surf, label: str, anchor: dict, size: str = "md",
-                  fill=K["hi"], color=K["ink"], slant: int = 10) -> pygame.Rect:
-        """Modal title: slanted saffron box with Lalezar label."""
+                  fill=K["hi"], color=K["ink"], slant: int = 0) -> pygame.Rect:
+        """Title plate: rounded yellow box with a Lalezar label."""
         t = self.text(label, size, color, "display")
-        r = pygame.Rect(0, 0, t.get_width() + 34 + slant, t.get_height() + 2)
+        r = pygame.Rect(0, 0, t.get_width() + 34, t.get_height() + 2)
         for k, v in anchor.items():
             setattr(r, k, v)
-        skew_box(surf, r, fill, slant)
+        plate(surf, r, fill, radius=RADIUS)
         surf.blit(t, t.get_rect(center=(r.centerx, r.centery + 2)))
         return r
+
+    def logo(self, height: int, alpha: int = 255) -> pygame.Surface | None:
+        """The CHIZ logo (assets/img/chiz-logo.png) scaled to `height`."""
+        key = ("__logo__", height, alpha)
+        surf = self._text_cache.get(key)
+        if surf is None:
+            if self._logo_src is None:
+                try:
+                    src = pygame.image.load(str(LOGO_PATH))
+                    try:
+                        src = src.convert_alpha()
+                    except pygame.error:
+                        pass
+                    self._logo_src = src
+                except (pygame.error, FileNotFoundError):
+                    self._logo_src = False
+            if not self._logo_src:
+                return None
+            w, h = self._logo_src.get_size()
+            surf = pygame.transform.smoothscale(self._logo_src, (max(1, int(w * height / h)), height))
+            if alpha < 255:
+                surf = surf.copy()
+                surf.set_alpha(alpha)
+            self._text_cache[key] = surf
+        return surf
 
     def close_x(self, surf, rect: pygame.Rect) -> None:
         """.k-modal-x: pomegranate square with a white ×."""
@@ -379,11 +411,12 @@ class Theme:
             return
         sink = int(round(4 * pressed))
         r = rect.move(sink, sink)
-        pygame.draw.rect(surf, K["ink"], rect.move(5, 5))
-        pygame.draw.rect(surf, K["paper"], r)
+        pygame.draw.rect(surf, K["ink"], rect.move(5, 5), border_radius=RADIUS)
+        pygame.draw.rect(surf, K["paper"], r, border_radius=RADIUS)
         stub_w = min(64, r.h)
         stub = pygame.Rect(r.right - stub_w, r.top, stub_w, r.h)
-        pygame.draw.rect(surf, K["hi"], stub)
+        pygame.draw.rect(surf, K["hi"], stub, border_top_right_radius=RADIUS,
+                         border_bottom_right_radius=RADIUS)
         pygame.draw.line(surf, K["ink"], (stub.left, r.top), (stub.left, r.bottom - 1), W)
         if red_dot:
             rad = max(9, stub_w // 2 - 12)
@@ -394,7 +427,7 @@ class Theme:
                                (cx - rad // 3, cy - rad // 3), max(2, rad // 3))
         else:
             arrow(surf, (stub.centerx - 6, stub.centery), 12, "left")
-        pygame.draw.rect(surf, K["ink"], r, W)
+        pygame.draw.rect(surf, K["ink"], r, W, border_radius=RADIUS)
         body = pygame.Rect(r.left, r.top, r.w - stub_w, r.h)
         t = self.fit_text(label, body.w - 20, (size, "md", "sm"), K["ink"], "display")
         surf.blit(t, t.get_rect(center=(body.centerx, body.centery + 2)))
@@ -412,20 +445,24 @@ class Theme:
         t = self.fit_text(label, rect.w - 16, (size, "sm", "xs"), color)
         surf.blit(t, t.get_rect(center=rect.center))
 
-    def stage(self, surf, color=None) -> None:
-        """Flat stage colour behind the paper (no texture)."""
+    def stage(self, surf, color=None, frame=None) -> None:
+        """Navy stage inside the red rounded frame of the booth art."""
         surf.fill(color or K["stage"])
+        r = pygame.Rect(0, 0, self.w, self.h).inflate(-12, -12)
+        pygame.draw.rect(surf, K["ink"], r, 12, border_radius=26)
+        pygame.draw.rect(surf, frame or K["frame"], r.inflate(-4, -4), 8, border_radius=24)
 
     def modal(self, surf, rect: pygame.Rect) -> None:
-        """.k-modal frame: paper, 4px ink frame, 8px hard drop."""
-        plate(surf, rect, K["paper"], outline=W_LG, shadow=OFF_LG)
+        """Modal frame: white plate, 4px ink frame, 8px hard drop."""
+        plate(surf, rect, K["paper"], outline=W_LG, shadow=OFF_LG, radius=RADIUS_LG)
 
     def progress_bar(self, surf, rect: pygame.Rect, frac: float,
                      color=K["hi"]) -> None:
-        pygame.draw.rect(surf, K["paper_2"], rect)
+        pygame.draw.rect(surf, K["paper_2"], rect, border_radius=rect.h // 2)
         inner = rect.inflate(-6, -6)
         fw = int(inner.w * max(0.0, min(1.0, frac)))
         if fw > 0:
             # RTL: the bar drains toward the start (right) edge
-            pygame.draw.rect(surf, color, (inner.right - fw, inner.top, fw, inner.h))
-        pygame.draw.rect(surf, K["ink"], rect, W_SM + 1)
+            pygame.draw.rect(surf, color, (inner.right - fw, inner.top, fw, inner.h),
+                             border_radius=inner.h // 2)
+        pygame.draw.rect(surf, K["ink"], rect, W_SM + 1, border_radius=rect.h // 2)

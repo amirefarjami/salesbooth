@@ -333,7 +333,7 @@ class DoorScreen(Screen):
     def draw(self, surf: pygame.Surface) -> None:
         t = self.app.theme
         warn = self.warning
-        t.stage(surf, K["danger"] if warn else None)
+        t.stage(surf, K["danger"] if warn else None, K["hi"] if warn else None)
         box = pygame.Rect(24, 64, t.w - 48, 640)
         t.modal(surf, box)
         cx = box.centerx
