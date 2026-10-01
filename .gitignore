@@ -29,3 +29,8 @@ Thumbs.db
 
 # Freebuff workspace metadata (local only)
 .freebuff/
+
+# Brand display font (Sina Bold, © MRT/Win2Farsi) — not redistributable;
+# copy it to assets/fonts/ on each booth by hand. Lalezar is the fallback.
+assets/fonts/SSINABD.TTF
+assets/fonts/ssinabd.ttf

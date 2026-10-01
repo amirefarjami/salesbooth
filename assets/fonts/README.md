@@ -13,3 +13,15 @@ If they are ever missing, restore them with:
 
 `core/fonts.py` falls back to pygame's built-in font if files are absent
 (Persian will render unshaped — always restore the real fonts).
+
+## Brand display font — Sina Bold (`SSINABD.TTF`), NOT in git
+
+The CHIZ slogan face. It is copyrighted (© 1998 MRT / Win2Farsi) with no
+redistribution license and this repo is public, so the file is git-ignored.
+Copy it onto every machine by hand:
+
+    scp SSINABD.TTF pi@chiz.local:~/salesbooth/assets/fonts/
+
+Without it the kiosk falls back to Lalezar automatically. Its digits are
+mis-encoded (۶ draws as ۱, ۷ as U), so `kiosk/theme.py` never uses it for
+any text that contains a number — prices and codes always come from Lalezar.

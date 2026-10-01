@@ -171,3 +171,17 @@ def test_attract_cycles_brand_and_posters(app):
     app.step(16)                      # poster slide draws
     app.step(16, ["slot4"])           # any button still starts shopping
     assert app.current_name == "grid" and app.current.selected == 3
+
+
+def test_brand_font_never_renders_digits(app):
+    """Sina Bold maps ۶→۱ and ۷→U; numbers must come from another face."""
+    t = app.theme
+    brand = t.fonts.brand("md")
+    if brand is None:
+        pytest.skip("SSINABD.TTF not installed")
+    from core.fa import shape
+    sina_h = brand.render(shape("پرداخت"), True, (0, 0, 0)).get_height()
+    price = t.text("۶۰,۰۰۰", "md", face="display")
+    assert price.get_height() != sina_h                # not rendered by Sina
+    word = t.text("پرداخت", "md", face="display")
+    assert word.get_height() == sina_h                 # words still use Sina
