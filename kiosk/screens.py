@@ -56,18 +56,37 @@ def _press(t_ms: int, period: int = 1400) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Attract — brand burst, how-to card, pulsing «press red» ticket
+# Attract — brand slide (logo, slogan, how-to, «press red») alternating
+# with the product posters; any button starts shopping
 # ---------------------------------------------------------------------------
 
 class AttractScreen(Screen):
     idle_timeout = False
+    # (slide, seconds): the brand slide stays longest
+    SLIDES = (("brand", 9), ("poster-1.jpg", 5), ("brand", 9), ("poster-2.jpg", 5))
 
     def __init__(self, app) -> None:
         super().__init__(app)
         self.t_ms = 0
+        self.slide_ms = 0
+        self.slide = 0
+
+    def enter(self) -> None:
+        super().enter()
+        self.slide = 0
+        self.slide_ms = 0
 
     def tick(self, dt_ms: int) -> None:
         self.t_ms += dt_ms
+        self.slide_ms += dt_ms
+        name, secs = self.SLIDES[self.slide]
+        if self.slide_ms >= secs * 1000:
+            self.slide_ms = 0
+            self.slide = (self.slide + 1) % len(self.SLIDES)
+            # skip posters whose file is missing
+            if self.SLIDES[self.slide][0] != "brand" and \
+                    self.app.theme.image(self.SLIDES[self.slide][0]) is None:
+                self.slide = 0
 
     def handle(self, action: str) -> None:
         self.app.sounds.play("select")
@@ -77,23 +96,31 @@ class AttractScreen(Screen):
             grid.handle(action)   # a slot button jumps straight to its card
 
     def draw(self, surf: pygame.Surface) -> None:
+        name = self.SLIDES[self.slide][0]
+        if name == "brand":
+            self._draw_brand(surf)
+        else:
+            self._draw_poster(surf, name)
+
+    def _draw_brand(self, surf) -> None:
         t = self.app.theme
         t.stage(surf)
         cx = t.w // 2
 
-        # brand logo, gently bobbing
-        bob = int(round(5 * math.sin(self.t_ms / 600)))
-        by = 180 + bob
-        logo = t.logo(250)
-        if logo is not None:
-            surf.blit(logo, logo.get_rect(center=(cx, by)))
-        t.title_box(surf, "باجه‌ی فروش", {"midtop": (cx, 318)}, "md")
+        rc = t.image("recycle.png", height=40)
+        if rc is not None:
+            surf.blit(rc, (30, 28))
 
-        t.sticker(surf, "محصولات بازیافتی از تخته‌اسکیت‌های شکسته",
-                  {"midtop": (cx, 398)}, size="xs")
+        bob = int(round(5 * math.sin(self.t_ms / 600)))
+        logo = t.logo(210)
+        if logo is not None:
+            surf.blit(logo, logo.get_rect(center=(cx, 150 + bob)))
+        slogan = t.image("chiz-slogan.png", width=300)
+        if slogan is not None:
+            surf.blit(slogan, slogan.get_rect(midtop=(cx, 272)))
 
         # how-to card (paper, kicker-rule heading, 3 numbered steps)
-        card = pygame.Rect(36, 446, t.w - 72, 196)
+        card = pygame.Rect(36, 344, t.w - 72, 196)
         plate(surf, card, K["paper"])
         y = t.kicker_rule(surf, "چطوری بخرم؟", cx, card.top + 10, 140)
         steps = [
@@ -110,11 +137,41 @@ class AttractScreen(Screen):
             s = t.fit_text(label, card.w - 70, ("sm", "xs"))
             surf.blit(s, s.get_rect(midright=(mx - 24, row_y + 12)))
 
-        ticket = pygame.Rect(36, 672, t.w - 72, 72)
-        t.go_ticket(surf, ticket, "دکمه‌ی قرمز رو بزن", "lg",
-                    pressed=_press(self.t_ms))
+        self._draw_cta(surf, 576)
+        self._draw_footer(surf)
+
+    def _draw_poster(self, surf, name: str) -> None:
+        t = self.app.theme
+        surf.fill(K["poster"])
+        poster = t.image(name, width=t.w)
+        if poster is not None:
+            surf.blit(poster, (0, 0))
+            # letterbox: continue the poster's bottom edge down the screen
+            ph = poster.get_height()
+            if ph < t.h:
+                edge = poster.subsurface((0, ph - 24, poster.get_width(), 24))
+                soft = pygame.transform.smoothscale(edge, (4, 1))   # average tones
+                surf.blit(pygame.transform.smoothscale(soft, (t.w, t.h - ph)), (0, ph))
+        # keep the red frame and the call to action on the poster slides too
+        r = pygame.Rect(0, 0, t.w, t.h).inflate(-12, -12)
+        pygame.draw.rect(surf, K["ink"], r, 12, border_radius=26)
+        pygame.draw.rect(surf, K["frame"], r.inflate(-4, -4), 8, border_radius=24)
+        self._draw_cta(surf, 664)
+
+    def _draw_cta(self, surf, top: int) -> None:
+        t = self.app.theme
+        ticket = pygame.Rect(36, top, t.w - 72, 72)
+        t.go_ticket(surf, ticket, "دکمه‌ی قرمز رو بزن", "lg", pressed=_press(self.t_ms))
+
+    def _draw_footer(self, surf) -> None:
+        t = self.app.theme
+        cx = t.w // 2
         hint = t.text("هر دکمه‌ای شروع می‌کنه", "xs", K["alt_ink"], bold=False)
-        surf.blit(hint, hint.get_rect(midtop=(cx, ticket.bottom + 16)))
+        surf.blit(hint, hint.get_rect(midtop=(cx, 668)))
+        tag = t.text("@CHIZ_THING", "sm", K["hi"])
+        made = t.text("MADE IN IRAN", "xs", K["alt_ink"])
+        surf.blit(tag, tag.get_rect(midtop=(cx, 712)))
+        surf.blit(made, made.get_rect(midtop=(cx, 740)))
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +336,7 @@ class GridScreen(Screen):
         self._draw_action_bar(surf, t)
 
     def _draw_header(self, surf, t) -> None:
-        logo = t.logo(62)
+        logo = t.image("chiz-wordmark.png", height=60)
         right = t.w - 24
         if logo is not None:
             r = logo.get_rect(topright=(right, 14))
@@ -375,14 +432,11 @@ class ConfirmScreen(Screen):
         y += name.get_height() + 4
         y = t.kicker_rule(surf, f"{fa_digits(self.qty)} عدد", cx, y, 120, "xs")
 
-        price = t.text(price_fa(self.total), "xl", K["ink"], "display")
+        # price headline in the brand's comic burst, «تومان» beside it
+        burst_r = t.price_burst(surf, (cx + 18, y + 44), price_fa(self.total), 230, 84, "xl")
         cur = t.text("تومان", "sm", K["muted"])
-        total_w = price.get_width() + 10 + cur.get_width()
-        px = cx + total_w // 2
-        surf.blit(price, price.get_rect(topright=(px, y + 6)))
-        surf.blit(cur, cur.get_rect(bottomright=(px - price.get_width() - 10,
-                                                 y + 6 + price.get_height() - 12)))
-        y += price.get_height() + 12
+        surf.blit(cur, cur.get_rect(midright=(burst_r.left - 2, burst_r.centery + 4)))
+        y += 98
 
         method = PROVIDER_LABEL.get(self.app.provider.name, self.app.provider.name)
         t.kicker(surf, method, {"midtop": (cx, y)}, size="xs", marker=K["alt"],

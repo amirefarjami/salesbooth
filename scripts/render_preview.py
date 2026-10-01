@@ -152,8 +152,12 @@ def render(booth, products: list) -> None:
         pygame.image.save(app.screen, str(OUT / f"{name}.png"))
         print("rendered", name)
 
-    # 1 — attract
+    # 1 — attract: brand slide + the two poster slides
     snap("1-attract", 1500)
+    for i, name in ((1, "1b-attract-poster-1"), (3, "1c-attract-poster-2")):
+        app.current.slide, app.current.slide_ms = i, 0
+        snap(name)
+    app.current.slide = 0
 
     # 2 — grid, nothing picked yet
     app.go("grid")
