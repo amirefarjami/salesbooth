@@ -12,8 +12,8 @@ from kiosk.theme import K, RADIUS_SM, W, burst, plate, selected_card
 
 
 def price_fa(amount: int) -> str:
-    """150000 -> '۱۵۰٬۰۰۰' (Persian digits + Arabic thousands separator)."""
-    return fa_digits(f"{int(amount):,}".replace(",", "٬"))
+    """150000 -> '۱۵۰,۰۰۰' (Persian digits; the brand font has no '٬')."""
+    return fa_digits(f"{int(amount):,}")
 
 
 class ProductCard:
@@ -69,8 +69,8 @@ class ProductCard:
         pygame.draw.rect(surf, K["ink"], img_rect, 2, border_radius=6)
 
         # name ---------------------------------------------------------
-        name = t.fit_text(self.product.name, r.w - 24, ("sm", "xs"),
-                          K["muted"] if self.sold_out else K["ink"])
+        name = t.fit_text(self.product.name, r.w - 24, ("xs",),
+                          K["muted"] if self.sold_out else K["ink"], "display")
         surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 3)))
 
         # price: comic burst on the top corner (start = right edge) ---

@@ -27,6 +27,10 @@ from core.fonts import FontPack
 IMG_DIR = ASSETS_DIR / "img"
 
 
+def _HAS_DIGIT(label: str) -> bool:
+    return any(ch.isdigit() for ch in label)   # ASCII, ۰-۹ and ٠-٩
+
+
 def _hex(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
@@ -245,18 +249,25 @@ class Theme:
 
     def text(self, s: str, size: str = "md", color=K["ink"],
              face: str = "body", bold: bool = True) -> pygame.Surface:
-        """Render (and cache) a label; Persian is shaped automatically."""
+        """Render (and cache) a label; Persian is shaped automatically.
+        face="display" tries Sina Bold, then Lalezar, then Vazirmatn Bold —
+        the first one that has a real glyph for every character."""
         key = (s, size, color, face, bold)
         surf = self._text_cache.get(key)
         if surf is None:
             label = shape(s) if is_rtl(s) else s
-            if face == "display" and not self._display_covers(label):
-                face = "body"   # Lalezar lacks some presentation forms
+            font = None
             if face == "display":
-                font = self.fonts.display(size)
+                # Sina Bold's digits are mis-encoded (۶ draws as ۱, ۷ as U):
+                # anything with a number goes to Lalezar so prices stay right
+                brand = None if _HAS_DIGIT(label) else self.fonts.brand(size)
+                for cand in (brand, self.fonts.display(size)):
+                    if cand is not None and self._covers(cand, label):
+                        font = cand
+                        break
             elif face == "px":
                 font = self.fonts.px(size)
-            else:
+            if font is None:
                 font = self.fonts.fa(size, bold)
             surf = font.render(label, True, color)
             if len(self._text_cache) > 600:
@@ -264,26 +275,25 @@ class Theme:
             self._text_cache[key] = surf
         return surf
 
-    def _display_covers(self, label: str) -> bool:
-        """True when Lalezar has a real glyph for every char of `label`
+    def _covers(self, font: pygame.font.Font, label: str) -> bool:
+        """True when `font` has a real glyph for every char of `label`
         (a missing glyph renders identical to the .notdef box)."""
         cache = self.__dict__.setdefault("_glyph_ok", {})
-        font = self.fonts.display("xs")
-        if "\uffff" not in cache:
-            cache["\uffff"] = pygame.image.tobytes(font.render("\uffff", False, (0, 0, 0)), "RGB") \
-                if hasattr(pygame.image, "tobytes") else pygame.image.tostring(
-                    font.render("\uffff", False, (0, 0, 0)), "RGB")
-        notdef = cache["\uffff"]
+
+        def raw(ch: str) -> bytes:
+            g = font.render(ch, False, (0, 0, 0))
+            return pygame.image.tobytes(g, "RGB") if hasattr(pygame.image, "tobytes") \
+                else pygame.image.tostring(g, "RGB")
+        fid = id(font)
+        notdef = cache.get((fid, "\uffff"))
+        if notdef is None:
+            notdef = cache[(fid, "\uffff")] = raw("\uffff")
         for ch in set(label):
             if ch.isspace():
                 continue
-            ok = cache.get(ch)
+            ok = cache.get((fid, ch))
             if ok is None:
-                g = font.render(ch, False, (0, 0, 0))
-                raw = pygame.image.tobytes(g, "RGB") if hasattr(pygame.image, "tobytes") \
-                    else pygame.image.tostring(g, "RGB")
-                ok = raw != notdef
-                cache[ch] = ok
+                ok = cache[(fid, ch)] = raw(ch) != notdef
             if not ok:
                 return False
         return True
@@ -347,7 +357,7 @@ class Theme:
                     width: int, size: str = "sm") -> int:
         """.k-kicker-rule: centred heading with an ink rule + saffron under-rule.
         Returns the y just below it."""
-        t = self.text(label, size, K["ink"])
+        t = self.text(label, size, K["ink"], "display")
         surf.blit(t, t.get_rect(midtop=(center_x, top)))
         y = top + t.get_height() + 2
         pygame.draw.rect(surf, K["hi"], (center_x - width // 2, y + 3, width, 4))
@@ -482,7 +492,13 @@ class Theme:
             "alt": (K["alt"], K["alt_ink"]),
         }[kind]
         plate(surf, rect, fill, shadow=OFF)
-        t = self.fit_text(label, rect.w - 16, (size, "sm", "xs"), color)
+        # Sina runs large: one step down from the requested size, and the
+        # label never takes more than ~60% of the button height
+        steps = ("xs", "sm", "md", "lg", "xl")
+        start = max(0, steps.index(size) - 1) if size in steps else 1
+        t = self.fit_text(label, rect.w - 16, steps[start::-1], color, "display")
+        if t.get_height() > rect.h * 0.8:
+            t = self.fit_text(label, rect.w - 16, ("xs",), color, "display")
         surf.blit(t, t.get_rect(center=rect.center))
 
     def stage(self, surf, color=None, frame=None) -> None:
