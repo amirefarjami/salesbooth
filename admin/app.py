@@ -195,6 +195,54 @@ def reports_csv(days: int = 30, booth: Booth = Depends(require_login)):
         headers={"Content-Disposition": "attachment; filename=chiz-sales.csv"})
 
 
+PREVIEW_STEPS = [
+    {"src": "/admin/preview-img/1-attract.png", "alt": "1-attract",
+     "title": "حالت جذب مشتری",
+     "desc": "برست «چیز»، راهنمای سه‌مرحله‌ای، بلیت «دکمه‌ی قرمز رو بزن»"},
+    {"src": "/admin/preview-img/2-grid.png", "alt": "2-grid",
+     "title": "منوی محصولات",
+     "desc": "گرید ۲×۳؛ کنار هر کارت شماره‌ی دکمه‌ی فیزیکی کنار مانیتور"},
+    {"src": "/admin/preview-img/3-grid-selected.png", "alt": "3-grid-selected",
+     "title": "کالا انتخاب شد",
+     "desc": "قاب زعفرانی + بلیت خرید؛ قرمز = ادامه، انصراف = بی‌خیال"},
+    {"src": "/admin/preview-img/4-confirm.png", "alt": "4-confirm",
+     "title": "تأیید خرید",
+     "desc": "عکس، قیمت درشت، روش پرداخت"},
+    {"src": "/admin/preview-img/5-pay-qr.png", "alt": "5-pay-qr",
+     "title": "پرداخت با QR زرین‌پال",
+     "desc": "مشتری با گوشی اسکن می‌کند؛ باجه در پس‌زمینه استعلام می‌گیرد"},
+    {"src": "/admin/preview-img/6-pay-wait.png", "alt": "6-pay-wait",
+     "title": "پرداخت نزد فروشنده",
+     "desc": "کد سفارش درشت؛ فروشنده از پنل تأیید می‌کند"},
+    {"src": "/admin/preview-img/7-pay-failed.png", "alt": "7-pay-failed",
+     "title": "پرداخت ناموفق",
+     "desc": "موجودی برمی‌گردد؛ قرمز = تلاش دوباره"},
+    {"src": "/admin/preview-img/8-door-open.png", "alt": "8-door-open",
+     "title": "در ویترین باز شد",
+     "desc": "قفل باز، شمارش معکوس، LED گرم"},
+    {"src": "/admin/preview-img/9-door-closing.png", "alt": "9-door-closing",
+     "title": "ثانیه‌های آخر",
+     "desc": "نور قرمز + آلارم، بعد قفل دوباره بسته می‌شود"},
+]
+
+
+@app.get("/admin/preview", response_class=HTMLResponse)
+def booth_preview(request: Request):
+    """Gallery of real kiosk renders (data/preview/*.png)."""
+    return templates.TemplateResponse(request, "preview.html", {
+        "hide_nav": True, "steps": PREVIEW_STEPS,
+    })
+
+
+@app.get("/admin/preview-img/{name}.png")
+def booth_preview_png(name: str):
+    p = (DATA_DIR / "preview" / f"{name}.png").resolve()
+    if not str(p).startswith(str((DATA_DIR / "preview").resolve())) or not p.is_file():
+        raise HTTPException(404)
+    from fastapi.responses import FileResponse
+    return FileResponse(p, media_type="image/png")
+
+
 @app.get("/admin/img/{rel_path:path}")
 def product_image(rel_path: str):
     """Serve uploaded product images from the data dir."""
