@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 {% set nav = 'products' %}
 {% block body %}
+<div class="panel muted" style="font-size:14px; line-height:1.9">
+  باجه فقط <b>۶ محصولِ فعال</b> را نشان می‌دهد، به ترتیبِ عدد «ترتیب» (کوچک‌تر = جلوتر).
+  اولی کنار دکمه‌ی ۱ (چپ، بالا) است، دومی کنار دکمه‌ی ۲ (راست، بالا)، سومی ۳ (چپ، وسط) و …
+  ستون «روی باجه» نشان می‌دهد هر محصول کنار کدام دکمه است.
+  تغییرات بعد از برگشت باجه به صفحه‌ی اول دیده می‌شوند.
+</div>
+
 <div class="panel">
   <h2>محصول جدید</h2>
   <form method="post" action="/admin/products/create" enctype="multipart/form-data">
     <div class="row" style="flex-wrap:wrap">
       <input name="name" placeholder="نام محصول" style="flex:2; min-width:180px" required>
       <input name="price_toman" type="number" min="0" placeholder="قیمت (تومان)" style="flex:1; min-width:130px" required>
-      <input name="stock" type="number" min="0" value="5" style="flex:1; min-width:90px">
-      <input name="sort_order" type="number" value="0" style="max-width:80px" title="ترتیب">
+      <input name="stock" type="number" min="0" value="5" placeholder="موجودی" title="موجودی" style="flex:1; min-width:90px">
+      <input name="sort_order" type="number" value="0" placeholder="ترتیب" title="ترتیب (جای روی باجه)" style="max-width:80px">
     </div>
     <div class="row" style="margin-top:8px">
       <input type="file" name="image" accept="image/*">
@@ -21,13 +28,14 @@
 <div class="panel">
   <h2>محصولات ({{ products|length }})</h2>
   <table>
-    <tr><th>عکس</th><th>نام</th><th>قیمت</th><th>موجودی</th><th>فعال</th><th>عملیات</th></tr>
+    <tr><th>عکس</th><th>روی باجه</th><th>نام · قیمت (تومان) · موجودی · ترتیب · فعال · عکس تازه</th></tr>
     {% for p in products %}
     <tr class="{% if p.stock == 0 %}low{% endif %}">
       <td>
         {% if p.image_path %}<img class="thumb" src="/admin/img/{{ p.image_path }}">{% else %}<span class="muted">—</span>{% endif %}
       </td>
-      <td colspan="5">
+      <td style="text-align:center">{% if on_booth.get(p.id) %}<b class="price">دکمه‌ی {{ on_booth[p.id] }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>
         <form method="post" action="/admin/products/{{ p.id }}/update" enctype="multipart/form-data"
               class="inline" style="width:100%">
           <input name="name" value="{{ p.name }}" style="flex:2; min-width:150px">
@@ -39,7 +47,7 @@
           <button class="small">💾 ذخیره</button>
         </form>
         <form method="post" action="/admin/products/{{ p.id }}/delete" class="inline"
-              onsubmit="return confirm('حذف {{ p.name }}؟')">
+              onsubmit="return confirm('حذف {{ p.name }}؟ (اگر قبلاً فروخته شده، فقط غیرفعال می‌شود تا گزارش‌ها بمانند)')">
           <button class="small danger">🗑</button>
         </form>
         <form method="post" action="/admin/products/{{ p.id }}/stock" class="inline">

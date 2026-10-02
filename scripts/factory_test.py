@@ -22,7 +22,7 @@ import pygame  # noqa: E402
 from core.config import load_config  # noqa: E402
 from core.fa import shape  # noqa: E402
 from core.fonts import FontPack  # noqa: E402
-from hardware.input import SLOT_ACTIONS, Action, build_action_map  # noqa: E402
+from hardware.input import JOY_BASE, SLOT_ACTIONS, Action, build_action_map  # noqa: E402
 from hardware.button_light import ButtonLight  # noqa: E402
 from hardware.door import DoorSensor  # noqa: E402
 from hardware.led import LEDStrip  # noqa: E402
@@ -54,6 +54,8 @@ def main() -> int:
     fonts = fp.fa("md")
     fa_big = fp.fa("xl")
     action_map = build_action_map(cfg)
+    pygame.joystick.init()
+    pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
     leds = LEDStrip(cfg)
     door = DoorSensor(cfg)
     red = ButtonLight(cfg)
@@ -66,26 +68,38 @@ def main() -> int:
     running = True
     while running:
         for ev in pygame.event.get():
+            code = name = None
             if ev.type == pygame.QUIT:
                 running = False
             elif ev.type == pygame.KEYDOWN:
-                act = action_map.get(ev.key)
                 if ev.key == pygame.K_q and ev.mod & pygame.KMOD_CTRL:
                     running = False
-                elif act is not None:
-                    if act == Action.DOOR_SIM:
-                        door.toggle_sim()
-                    if act == Action.CONFIRM:      # red lamp + lock coil for 1 s
-                        red_until = pygame.time.get_ticks() + 1000
-                        lock.unlock()
-                    pressed.insert(0, (LABELS[act], f"key={ev.key}"))
-                    leds._set_all(LED_COLOR[act])
-                    pressed = pressed[:8]
+                    continue
+                code, name = ev.key, pygame.key.name(ev.key)
+            elif ev.type == pygame.JOYBUTTONDOWN:          # «Zero Delay» encoders
+                code, name = JOY_BASE + ev.button, f"joy{ev.button}"
+            elif ev.type == pygame.JOYDEVICEADDED:
+                pads.append(pygame.joystick.Joystick(ev.device_index))
+            if code is None:
+                continue
+            act = action_map.get(code)
+            if act is None:
+                # unmapped: show what to put in booth.toml [booth.keymap]
+                pressed.insert(0, ("نگاشت‌نشده", f'"{name}"'))
+            else:
+                if act == Action.DOOR_SIM:
+                    door.toggle_sim()
+                if act == Action.CONFIRM:      # red lamp + lock coil + warn lights, 1 s
+                    red_until = pygame.time.get_ticks() + 1000
+                    lock.unlock()
+                pressed.insert(0, (LABELS.get(act, act.value), f'"{name}"'))
+                leds._set_all(LED_COLOR.get(act, (255, 255, 255)))
+            pressed = pressed[:8]
 
         now = pygame.time.get_ticks()
         red.set("on" if now < red_until else "off")
         red.tick()
-        lights.set("warn" if now < red_until else "normal")   # MOSFET 1 dim + MOSFET 2 red
+        lights.set("warn" if now < red_until else "door")     # MOSFET 1 dim + MOSFET 2 red
         lights.tick(clock.get_time())
         if now >= red_until and lock.is_open:
             lock.lock()

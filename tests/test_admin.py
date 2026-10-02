@@ -98,3 +98,62 @@ def test_csv_export(client):
     r = client.get("/admin/reports/export.csv")
     assert r.status_code == 200
     assert "تست۳" in r.text
+
+
+def test_logout_really_ends_session(client):
+    _login(client)
+    assert client.get("/admin", follow_redirects=False).status_code == 200
+    client.post("/admin/logout", follow_redirects=False)
+    r = client.get("/admin", follow_redirects=False)
+    assert r.status_code == 303 and "/admin/login" in r.headers["location"]
+
+
+def test_delete_sold_product_hides_it_instead(client):
+    _login(client)
+    booth = _state["booth"]
+    pid = booth.products.create("فروخته‌شده", 1000, stock=3).id
+    owi = booth.orders.create(pid)
+    booth.orders.mark_paid(owi.order.id, provider="manual")
+    r = client.post(f"/admin/products/{pid}/delete", follow_redirects=False)
+    assert r.status_code == 303
+    p = booth.products.get(pid)
+    assert p is not None and not p.active and p.stock == 0   # history kept
+    pid2 = booth.products.create("هرگز‌فروخته‌نشده", 1000, stock=1).id
+    client.post(f"/admin/products/{pid2}/delete", follow_redirects=False)
+    assert booth.products.get(pid2) is None
+
+
+def test_csv_has_bom_for_excel(client):
+    _login(client)
+    r = client.get("/admin/reports/export.csv")
+    assert r.content.startswith("﻿".encode("utf-8"))
+
+
+def test_big_phone_photo_is_resized(client, tmp_path, monkeypatch):
+    import io
+    from PIL import Image
+    import admin.app as admin_app
+    monkeypatch.setattr(admin_app, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(admin_app, "PRODUCT_IMG_DIR", tmp_path / "img" / "products")
+    _login(client)
+    buf = io.BytesIO()
+    Image.new("RGB", (3000, 4000), (200, 30, 30)).save(buf, "PNG")
+    r = client.post("/admin/products/create",
+                    data={"name": "عکس‌دار", "price_toman": "5000", "stock": "2",
+                          "sort_order": "1", "active": "true"},
+                    files={"image": ("photo.png", buf.getvalue(), "image/png")},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    p = next(p for p in _state["booth"].products.list_all() if p.name == "عکس‌دار")
+    assert p.image_path and p.image_path.endswith(".jpg")
+    with Image.open(tmp_path / p.image_path) as im:
+        assert max(im.size) == 600
+
+
+def test_products_page_shows_booth_button(client):
+    _login(client)
+    booth = _state["booth"]
+    booth.products.create("اولی", 1000, stock=1, sort_order=1)
+    booth.products.create("دومی", 1000, stock=1, sort_order=2)
+    r = client.get("/admin/products")
+    assert "دکمه‌ی 1" in r.text and "دکمه‌ی 2" in r.text

@@ -1,74 +1,168 @@
-# Wiring — CHIZ Booth panel
+# سیم‌کشی باجه
 
-## Buttons (8) → zero-delay USB encoder (shows up as a keyboard)
+این راهنما برای کسی است که قطعات را به رزبری‌پای وصل می‌کند. اگر برق‌کار یا الکترونیک‌کار داری، این صفحه را به او نشان بده.
 
-| Button | Place | Encoder key |
+> **ایمنی:** همیشه **قبل از وصل یا جدا کردن هر سیمی، برق رزبری و منبع ۱۲ ولت را قطع کن**. پایه‌های رزبری **۳٫۳ ولت** هستند؛ وصل کردن مستقیم ۵ یا ۱۲ ولت به آن‌ها رزبری را برای همیشه خراب می‌کند.
+
+---
+
+## ۱. دکمه‌ها (۸ تا) ← انکودر USB
+
+دکمه‌ها مستقیم به رزبری وصل نمی‌شوند. به یک **انکودر USB** (مثل «Zero Delay USB Encoder» دستگاه‌های آرکید) وصل می‌شوند و انکودر با کابل USB به رزبری می‌رود.
+
+| دکمه | جا | چراغ |
 |---|---|---|
-| 1 | left of the screen, top | `1` |
-| 2 | right of the screen, top | `2` |
-| 3 | left, middle | `3` |
-| 4 | right, middle | `4` |
-| 5 | left, bottom | `5` |
-| 6 | right, bottom | `6` |
-| Confirm (red, lit) | under the screen | `Enter` |
-| Cancel «انصراف» | under the screen | `Esc` |
+| ۱ | چپِ مانیتور، بالا | ندارد |
+| ۲ | راستِ مانیتور، بالا | ندارد |
+| ۳ | چپ، وسط | ندارد |
+| ۴ | راست، وسط | ندارد |
+| ۵ | چپ، پایین | ندارد |
+| ۶ | راست، پایین | ندارد |
+| تأیید (قرمز) | زیر مانیتور | **دارد** (بخش ۳) |
+| انصراف | زیر مانیتور | ندارد |
 
-Keys can be changed in `booth.toml` → `[booth.keymap]`.
-Each product button sits next to its card: button N always means the
-N-th product (admin sort order). Only the first 6 active products are shown.
+هر دکمه‌ی کالا همیشه برای کالایی است که کنارش روی صفحه آمده. دکمه‌ی ۱ کالای اولِ پنل است، دکمه‌ی ۲ کالای دوم و به همین ترتیب ([admin-panel.md](admin-panel.md)).
 
-## Raspberry Pi GPIO (BCM numbering, all configurable in `booth.toml`)
+### تنظیم کلید هر دکمه
 
-| Part | GPIO | Notes |
-|---|---|---|
-| Showcase lock relay | 17 (`lock_gpio`) | 12 V solenoid through a relay; ON = unlocked |
-| Door sensor (reed switch) | 27 (`door_sensor_gpio`) | switch between pin and GND, internal pull-up; door shut = LOW |
-| Red button lamp | 22 (`red_light_gpio`) | through a transistor/relay if the lamp is 12 V |
-| MOSFET 1 — booth main light | 12 (`booth_light_gpio`) | PWM-dimmed (logic-level MOSFET, e.g. IRLZ44N) |
-| MOSFET 2 — red warning lights | 13 (`warn_light_gpio`) | on during the last seconds and any overtime |
-| WS2812B LED strip | 18 (`led_gpio`) | data line; needs root (rpi_ws281x) |
+انکودرها دو جورند و برنامه با هر دو کار می‌کند:
+- **مثل کیبورد:** هر دکمه یک کلید می‌فرستد (مثلاً `1` یا `return`).
+- **مثل دسته‌ی بازی (گیم‌پد):** بیشتر انکودرهای Zero Delay این‌طوری‌اند. هر دکمه یک شماره دارد: `joy0`، `joy1`، …
 
-## Light scenes (MOSFET 1 = main, MOSFET 2 = red; `hardware/lights.py`)
+برای فهمیدن اینکه هر دکمه چه می‌فرستد:
+1. روی رزبری بنویس `cd ~/salesbooth && make factory-test`.
+2. دکمه‌ها را یکی‌یکی بزن. روی صفحه اسمش می‌آید؛ مثلاً `"joy4"` یا `"1"`. اگر جلویش «نگاشت‌نشده» نوشته، یعنی هنوز به هیچ کاری وصل نشده.
+3. `booth.toml` را باز کن (`nano ~/salesbooth/booth.toml`) و در بخش `[booth.keymap]` اسم‌ها را بنویس:
+   ```toml
+   [booth.keymap]
+   slot1 = "joy0"      # دکمه‌ی ۱
+   slot2 = "joy1"      # دکمه‌ی ۲
+   slot3 = "joy2"
+   slot4 = "joy3"
+   slot5 = "joy4"
+   slot6 = "joy5"
+   confirm = "joy6"    # قرمز
+   cancel = "joy7"     # انصراف
+   ```
+4. دوباره `make factory-test` را بزن و چک کن هر دکمه اسم درست را نشان بدهد (کالا ۱، کالا ۲، …، تأیید، انصراف).
 
-| When | Main light | Red lights | Red button lamp |
+---
+
+## ۲. پایه‌های رزبری‌پای
+
+شماره‌گذاری پایه‌ها دو جور است: «GPIO» (همانی که در `booth.toml` می‌نویسی) و «شماره‌ی فیزیکی» (جای واقعی پایه روی شانه‌ی ۴۰ پایه). پایه‌ی فیزیکی ۱ گوشه‌ای است که نزدیک کارت حافظه است و دورش یک مربع کشیده‌اند.
+
+| قطعه | GPIO | پایه‌ی فیزیکی | تنظیم در `booth.toml` |
 |---|---|---|---|
-| Attract | breathes 60–100 % every 4 s | two short pulses every 25 s («insert coin») | blinks; fast during the call |
-| Red pressed on attract | ramps up from 20 % in 0.5 s («power on») | — | — |
-| Shopping | steady 85 % | off | blinks when red does something |
-| Product added | short flash to 100 % | — | — |
-| Waiting for payment | calm pulse 59–85 % | off | off |
-| Payment approved | soft pulse on every fanfare note, full on the final chord | on/off on the music's phrases | off |
-| Payment failed | dips to 40 % | two slow pulses | blinks (red = try again) |
-| Door open | 100 % (showcase lit) | off | off |
-| Last 5 s / overtime | dimmed to 15 % | on | off |
+| رله‌ی قفل ویترین | 17 | 11 | `lock_gpio` |
+| سنسور در | 27 | 13 | `door_sensor_gpio` |
+| لامپ دکمه‌ی قرمز | 22 | 15 | `red_light_gpio` |
+| ماسفت ۱ — نور اصلی | 12 | 32 | `booth_light_gpio` |
+| ماسفت ۲ — نورهای قرمز | 13 | 33 | `warn_light_gpio` |
+| نوار LED رنگی WS2812 (اختیاری) | 18 | 12 | `led_gpio` |
+| **زمین (GND)** | — | 6، 9، 14، 20، 25، 30، 34، 39 | — |
+| ۵ ولت (برای ماژول رله) | — | 2 یا 4 | — |
 
-Scene changes cross-fade in 0.4 s. Nothing flashes fully on/off more than 3
-times a second (photosensitivity) — a test enforces it.
+**زمین مشترک:** زمین (منفی) منبع ۱۲ ولت باید به یکی از پایه‌های GND رزبری هم وصل باشد؛ وگرنه ماسفت‌ها درست کار نمی‌کنند.
 
-## Hand-over sequence (semi-automatic — an operator is always there)
+---
 
-1. Payment approved → success animation on the screen.
-2. Lock relay ON: the screen says «در ویترین رو باز کن و خریدت رو بردار»
-   and lists the items (with the order code); the operator watches.
-3. Door sensor sees the door open → relay OFF (the latch catches again on
-   closing) and the countdown starts: 20 s for one item, +5 s for every
-   extra item (`door_open_s`, `door_extra_per_item_s`). The ring empties
-   from 12 o'clock counter-clockwise (RTL).
-4. Last 5 s (`door_warn_s`): beep-beep every second, MOSFET 1 dims the
-   booth light, MOSFET 2 turns the red lights on. After the countdown this
-   keeps going until the door is shut.
-5. Door shut → order marked delivered, back to the attract screen.
-   Door never opened within `door_wait_s` → lock again; the operator can
-   mark the order delivered in the admin panel.
+## ۳. قطعه به قطعه
 
-Card-reader payments are automatic: the booth pushes the amount to the
-reader, the buyer only swipes and enters the PIN, and the reader reports the
-result back (`core/pos.py`). The wire protocol depends on the PSP's PC-POS
-spec, so the real driver is added once the device is chosen (TASKS #24);
-until then `pos_driver = "sim"` approves after `pos_sim_approve_s` seconds.
+### قفل برقی ویترین (سلونوئید ۱۲ ولت) با ماژول رله
 
-## Field check
+```
+رزبری پایه 2 (5V) ──── VCC  ┐
+رزبری پایه 9 (GND) ─── GND  │ ماژول رله
+رزبری پایه 11 (GPIO17)─ IN  ┘
+                         COM ──── +12V منبع
+                         NO  ──── سیم + قفل
+                  منفی قفل ──── منفی منبع ۱۲ ولت
+```
 
-`make factory-test` shows every button press, the door sensor state, and
-on the red button lights its lamp and pulses the lock relay for 1 s.
-On the laptop simulator the `d` key opens/closes the door.
+- **NO** یعنی «معمولاً باز». قفل فقط وقتی برق می‌گیرد که رله روشن شود. اگر برق برود، قفل بسته می‌ماند.
+- **ماژول‌های رله‌ی ارزان اغلب «Low-trigger» هستند**؛ یعنی با سیگنال صفر روشن می‌شوند. اگر قفل برعکس کار کرد (همیشه باز بود و بعد از پرداخت بسته شد)، در `booth.toml` بنویس `lock_active_high = false`.
+- **گرم شدن قفل:** بعد از پرداخت، قفل تا وقتی در باز نشده برق‌دار می‌ماند؛ حداکثر `door_wait_s` ثانیه (پیش‌فرض ۶۰). بعضی قفل‌های سلونوئیدی ارزان برای برق دائم ساخته نشده‌اند و داغ می‌شوند. موقع خرید بپرس «برای کار دائم (continuous duty) هست؟». اگر نیست، `door_wait_s` را کم کن، مثلاً ۲۰.
+
+### سنسور در (رید سوییچ مغناطیسی)
+
+```
+رزبری پایه 13 (GPIO27) ──── یک سیم سنسور
+رزبری پایه 14 (GND)    ──── سیم دیگر سنسور
+```
+
+- رید سوییچ را روی بدنه و آهن‌ربایش را روی در نصب کن، طوری که وقتی در بسته است کنار هم باشند (کمتر از ۱ سانت).
+- مقاومت لازم نیست؛ رزبری مقاومت داخلی دارد.
+- با `make factory-test` در را باز و بسته کن. بالای صفحه باید «باز» و «بسته» عوض شود. اگر برعکس بود: `door_open_when_high = false`.
+
+### نورها و لامپ دکمه‌ی قرمز (با ماسفت)
+
+برای هر کدام از سه مورد زیر یک ماسفت لازم است:
+- **ماسفت ۱:** نور اصلی باجه.
+- **ماسفت ۲:** نورهای قرمز هشدار.
+- لامپ دکمه‌ی قرمز.
+
+```
+رزبری GPIO ──[ مقاومت 100Ω ]──┬── G (گیت)
+                              │
+                       [ مقاومت 10kΩ ]
+                              │
+رزبری GND ────────────────────┴── S (سورس) ──── منفی منبع ۱۲ ولت
+                                  D (درین) ──── سیم منفی نور / لامپ
+                            سیم مثبت نور ──── +12V منبع
+```
+
+- ماسفت باید **«Logic-Level»** باشد تا با ۳٫۳ ولت رزبری کامل روشن شود؛ مثلاً **IRLZ44N** یا ماژول‌های آماده‌ی «MOSFET module 3.3V». ماسفت معمولی مثل IRF540 کامل روشن نمی‌شود و داغ می‌کند.
+- مقاومت ۱۰ کیلو اهم باعث می‌شود موقع روشن شدن رزبری نورها خودسرانه روشن نشوند.
+- اگر نور LED پرمصرف است (بیشتر از ۲ تا ۳ آمپر)، ماسفت را روی هیت‌سینک ببند.
+
+### نوار LED رنگی WS2812 (اختیاری)
+
+اگر نداری، در `booth.toml` بنویس `led_enabled = false`. اگر داری: سیم دیتا به پایه‌ی 12 (GPIO18)، و برق نوار از منبع ۵ ولت جداگانه با زمین مشترک. این نوار به دسترسی root نیاز دارد و روی Pi 5 کار نمی‌کند.
+
+---
+
+## ۴. نورها در هر مرحله
+
+| کِی | نور اصلی (ماسفت ۱) | نور قرمز (ماسفت ۲) | لامپ دکمه‌ی قرمز |
+|---|---|---|---|
+| صفحه‌ی اول | هر ۴ ثانیه آرام بین ۶۰٪ و ۱۰۰٪ نفس می‌کشد | هر ۲۵ ثانیه دو چشمک کوتاه («Insert Coin») | چشمک می‌زند؛ هنگام فراخوان تند |
+| زدن قرمز در صفحه‌ی اول | در نیم ثانیه از ۲۰٪ کامل می‌شود | — | — |
+| انتخاب کالا | ثابت ۸۵٪ | خاموش | فقط وقتی قرمز کاری می‌کند چشمک می‌زند |
+| افزودن هر کالا | یک لحظه ۱۰۰٪ | — | — |
+| انتظار پرداخت | آرام کم و زیاد (حدود ۶۰ تا ۸۵٪) | خاموش | خاموش |
+| پرداخت موفق | با هر نت موزیک نرم می‌تپد، روی آکورد آخر کامل | روی جمله‌های موزیک روشن و خاموش | خاموش |
+| پرداخت ناموفق | یک لحظه ۴۰٪ | دو ضربه‌ی آرام | چشمک (قرمز = دوباره) |
+| در ویترین باز | ۱۰۰٪ | خاموش | خاموش |
+| ۵ ثانیه‌ی آخر و بعد از آن | کم‌نور (۱۵٪) | روشن | خاموش |
+
+جابه‌جایی بین حالت‌ها نرم است (۰٫۴ ثانیه). هیچ نوری بیشتر از ۳ بار در ثانیه کامل روشن و خاموش نمی‌شود، چون چشمک خیلی تند می‌تواند برای بعضی افراد خطرناک باشد.
+
+---
+
+## ۵. ترتیب تحویل (اپراتور همیشه کنار باجه است)
+
+1. پرداخت تأیید می‌شود ← انیمیشن و موزیک پرداخت موفق.
+2. **رله‌ی قفل روشن می‌شود.** صفحه می‌گوید «در ویترین رو باز کن و خریدت رو بردار» و فهرست اقلام و کد سفارش را نشان می‌دهد. اپراتور نظارت می‌کند.
+3. **سنسور می‌بیند در باز شد** ← رله خاموش می‌شود (تا قفل موقع بستن دوباره بگیرد) و شمارش معکوس شروع می‌شود: **۲۰ ثانیه برای ۱ قلم، +۵ ثانیه برای هر قلم اضافه.** دایره از بالا پادساعت‌گرد خالی می‌شود.
+4. **۵ ثانیه‌ی آخر:** هر ثانیه یک «بیق بیق»، نور اصلی کم‌نور و نور قرمز روشن. اگر وقت تمام شد و در هنوز باز است، تا بسته شدن ادامه دارد.
+5. **در بسته می‌شود** ← سفارش «تحویل شده» ثبت می‌شود و باجه به صفحه‌ی اول برمی‌گردد.
+   اگر در تا `door_wait_s` ثانیه باز نشود، قفل دوباره بسته می‌شود. اپراتور می‌تواند از پنل «تحویل شد» بزند.
+
+پرداخت با کارتخوان خودکار است: باجه مبلغ را به کارتخوان می‌فرستد و خریدار فقط کارت می‌کشد و رمز می‌زند. اتصال واقعی بعد از خرید دستگاه نوشته می‌شود ([card-reader.md](card-reader.md)).
+
+---
+
+## ۶. تست میدانی، قبل از بستن بدنه
+
+```bash
+cd ~/salesbooth && make factory-test
+```
+
+- [ ] هر ۸ دکمه اسم درست را نشان می‌دهند (کالا ۱ تا ۶، تأیید، انصراف).
+- [ ] با زدن **قرمز**: لامپ دکمه روشن می‌شود، صدای «تق» رله و باز شدن قفل می‌آید، نور اصلی کم و نور قرمز روشن می‌شود؛ همه برای ۱ ثانیه.
+- [ ] باز و بسته کردن در، بالای صفحه را بین «باز» و «بسته» عوض می‌کند.
+- [ ] بلندگو: یک خرید کامل در `make sim` بزن؛ صدای سکه، موزیک و بیق‌بیق شنیده شود.
+- [ ] یک خرید کامل با کالای واقعی داخل ویترین، از اول تا بسته شدن در.
+
+خروج از تست: `Ctrl+Q`. روی لپ‌تاپ کلید `d` جای سنسور در است.

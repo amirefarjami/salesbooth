@@ -66,3 +66,26 @@ def test_slot_index():
     assert slot_index("slot1") == 0
     assert slot_index("slot6") == 5
     assert slot_index("confirm") is None
+
+
+def test_gamepad_buttons_mappable():
+    from hardware.input import JOY_BASE
+    cfg = Config()
+    cfg.keymap = {"slot1": "joy0", "confirm": "joy9", "cancel": "escape"}
+    m = build_action_map(cfg)
+    assert m[JOY_BASE + 0] == Action.SLOT1
+    assert m[JOY_BASE + 9] == Action.CONFIRM
+    assert m[27] == Action.CANCEL
+
+
+def test_gamepad_event_becomes_action():
+    import os
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+    from hardware.input import KeyboardInput
+    pygame.init()
+    cfg = Config()
+    cfg.keymap = {"confirm": "joy3"}
+    inp = KeyboardInput(cfg)
+    pygame.event.post(pygame.event.Event(pygame.JOYBUTTONDOWN, button=3, joy=0, instance_id=0))
+    assert inp.pump() == [Action.CONFIRM]

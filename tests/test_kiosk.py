@@ -536,3 +536,20 @@ def test_no_full_flashing_faster_than_3_per_second(app, mode):
     lv = _levels(app.lights, mode, 30 if mode == "attract" else 3, step_ms=5)
     assert _max_per_second(_rises(lv, 2)) <= 3            # red channel
     assert _max_per_second(_rises([(t, m, r) for t, m, r in lv], 1, thr=0.3)) <= 3
+
+
+@pytest.mark.parametrize("method_slot", ["slot1", "slot2"])
+def test_manual_approval_in_panel_works_for_qr_and_card(app, monkeypatch, method_slot):
+    from core import zarinpal
+    from core.payment import PaymentStart
+    monkeypatch.setattr(zarinpal.ZarinpalProvider, "start",
+                        lambda self, oid, amt, d: PaymentStart(
+                            ok=True, provider="zarinpal", order_id=oid, amount=amt,
+                            authority="A", qr_payload="https://x/A"))
+    monkeypatch.setattr(zarinpal.ZarinpalProvider, "check",
+                        lambda self, start: PaymentCheck(PaymentStatus.PENDING))
+    pay = to_pay(app, method_slot)
+    app.booth.orders.mark_paid(pay.order_id, provider="manual", provider_ref="seller")
+    settle(app, pay, 3000)
+    assert app.current_name == "success"
+    assert app.booth.orders.get(pay.order_id).order.status == "paid"

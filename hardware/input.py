@@ -16,9 +16,13 @@ that presents itself as a keyboard, so the laptop simulator is identical.
     CANCEL   escape        «انصراف»
     DOOR_SIM d             laptop only: open/close the showcase door
 
+Many «Zero Delay» encoders show up as a GAMEPAD instead of a keyboard; then
+map its buttons as "joy0", "joy1", … (make factory-test shows each
+button's number when pressed).
+
 UP/DOWN/LEFT/RIGHT stay mappable for old joystick panels and tests.
-Keymap values in booth.toml may be key names ("1", "return", "f5") or
-raw pygame key codes (ints).
+Keymap values in booth.toml may be key names ("1", "return", "f5"),
+gamepad buttons ("joy3") or raw pygame key codes (ints).
 """
 from __future__ import annotations
 
@@ -67,11 +71,16 @@ _KEY_CODES = {
 }
 
 
+JOY_BASE = 0x7000_0000          # gamepad button N → JOY_BASE + N
+
+
 def key_code(name: str | int) -> int:
-    """Key name (or raw code) -> pygame-ce key code; 0 if unknown."""
+    """Key name, "joyN" or raw code -> lookup code; 0 if unknown."""
     if isinstance(name, int):
         return name
     n = str(name).strip().lower()
+    if n.startswith("joy") and n[3:].isdigit():
+        return JOY_BASE + int(n[3:])
     if n.lstrip("-").isdigit() and len(n) > 1:
         return int(n)                      # raw code given as a string
     if n in _KEY_CODES:
@@ -96,11 +105,29 @@ def build_action_map(cfg: Config) -> dict[int, Action]:
 
 
 class KeyboardInput:
-    """Translates pygame events into booth actions."""
+    """Translates pygame keyboard AND gamepad events into booth actions."""
 
     def __init__(self, cfg: Config) -> None:
         self.action_map = build_action_map(cfg)
         self.quit_requested = False
+        self._pads: dict = {}
+        try:
+            import pygame
+
+            pygame.joystick.init()
+            for i in range(pygame.joystick.get_count()):
+                self._open_pad(i)
+        except Exception:
+            pass
+
+    def _open_pad(self, index: int) -> None:
+        import pygame
+
+        try:
+            js = pygame.joystick.Joystick(index)
+            self._pads[js.get_instance_id()] = js   # keep a reference: events need it
+        except pygame.error:
+            pass
 
     def pump(self) -> list[Action]:
         """Drain the pygame event queue; returns actions pressed this frame."""
@@ -117,4 +144,10 @@ class KeyboardInput:
                 act = self.action_map.get(ev.key)
                 if act is not None:
                     actions.append(act)
+            elif ev.type == pygame.JOYBUTTONDOWN:
+                act = self.action_map.get(JOY_BASE + ev.button)
+                if act is not None:
+                    actions.append(act)
+            elif ev.type == pygame.JOYDEVICEADDED:
+                self._open_pad(ev.device_index)     # encoder plugged in later
         return actions
