@@ -1,6 +1,6 @@
 # CHIZ Booth — developer convenience targets (laptop simulator)
 
-.PHONY: sim sim-fullscreen test seed fonts panel clean
+.PHONY: sim sim-fullscreen test seed fonts panel preview factory-test install-pi install-pi-test
 
 # Run the kiosk UI in a 480x800 window (keyboard = booth buttons)
 sim:
@@ -28,3 +28,14 @@ panel:
 # Field test mode for button wiring
 factory-test:
 	.venv/bin/python scripts/factory_test.py
+
+# Render every kiosk screen to data/preview/*.png (+ demo products)
+preview:
+	.venv/bin/python scripts/render_preview.py
+
+# Raspberry Pi: quick try-out (no services) / full kiosk install
+install-pi-test:
+	bash scripts/install_pi.sh --test
+
+install-pi:
+	bash scripts/install_pi.sh

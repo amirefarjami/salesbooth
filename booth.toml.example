@@ -1,4 +1,4 @@
-# CHIZ Booth — optional config file.
+# CHIZ Booth — config file (docs/setup-pi.md explains every part).
 # Copy to booth.toml and edit. Every key is optional; env vars CHIZ_* win.
 # On the Pi kiosk, set  fullscreen = true .
 
@@ -6,6 +6,7 @@
 screen_w = 480
 screen_h = 800
 fullscreen = false
+screen_rotate = 0            # 90/270 if the panel is mounted landscape (800x480)
 fps = 60
 scanlines = false        # flat «کمیک قورمه» look
 scanline_strength = 32
@@ -28,6 +29,8 @@ hostname = "chiz"
 currency = "تومان"
 
 payment_methods = ["qr", "card"]   # what the buyer can pick (button 1 / 2)
+pos_driver = "sim"           # card reader link: "sim" until the PSP driver exists (docs/card-reader.md)
+pos_sim_approve_s = 5        # simulator: the «swipe» succeeds after N s (0 = never)
 payment_provider = "manual"   # "free" = every method auto-approves (testing)
 zarinpal_merchant_id = ""
 zarinpal_sandbox = true
