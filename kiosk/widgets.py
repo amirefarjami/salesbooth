@@ -20,8 +20,7 @@ class ProductCard:
     """One product slot on the 2×3 grid.
 
     Layout (from the hand sketch): photo on paper, the name under it, the
-    price sticker on the top tab, a red burst when few are left and a
-    yellow «×n» badge for how many are already in the cart. Each card sits
+    price sticker on the top tab and a yellow «×n» badge for how many are already in the cart. Each card sits
     next to its own physical button, so it carries no number.
     """
 
@@ -88,14 +87,6 @@ class ProductCard:
             # six times over; it stays only for the cart total)
             t.sticker(surf, price_fa(self.product.price_toman),
                       {"topright": (r.right - 8, r.top - 12)}, fill=K["hi"], size="sm")
-
-        # low-stock burst («۲ تا») ------------------------------------
-        if not self.sold_out and self.left <= 2:
-            c = (r.left + 30, r.top + 26)
-            burst(surf, c, 25, K["danger"])
-            lab = t.text("تموم" if self.left == 0 else f"{fa_digits(self.left)} تا",
-                         "xs", K["danger_ink"])
-            surf.blit(lab, lab.get_rect(center=(c[0], c[1] + 1)))
 
         # in-cart badge («×۲») on the photo's outer bottom corner
         if self.in_cart:

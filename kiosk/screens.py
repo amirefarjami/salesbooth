@@ -115,10 +115,9 @@ class AttractScreen(Screen):
                 self.slide = 0
 
     def handle(self, action: str) -> None:
-        self.app.sounds.play("select")
-        grid = self.app.go("grid")
-        if slot_index(action) is not None:
-            grid.handle(action)   # a product button already adds that product
+        if action == "confirm":               # only the red button starts
+            self.app.sounds.play("select")
+            self.app.go("grid")
 
     def draw(self, surf: pygame.Surface) -> None:
         name = self.SLIDES[self.slide][0]
@@ -151,7 +150,7 @@ class AttractScreen(Screen):
         steps = [
             ("دکمه‌ی کنار هر کالا = بنداز تو سبد", K["alt"]),
             ("دکمه‌ی قرمز = پرداخت با کیوآر یا کارت", K["danger"]),
-            ("اپراتور از ویترین بهت تحویل می‌ده", K["hi"]),
+            ("در ویترین باز می‌شه؛ خریدت رو بردار", K["hi"]),
         ]
         for i, (label, col) in enumerate(steps):
             row_y = y + 14 + i * 44
@@ -191,8 +190,7 @@ class AttractScreen(Screen):
     def _draw_footer(self, surf) -> None:
         t = self.app.theme
         cx = t.w // 2
-        hint = t.text("هر دکمه‌ای شروع می‌کنه", "xs", K["alt_ink"], bold=False)
-        surf.blit(hint, hint.get_rect(midtop=(cx, 668)))
+
         tag = t.text("@CHIZ_THING", "sm", K["hi"])
         made = t.text("MADE IN IRAN", "xs", K["alt_ink"])
         surf.blit(tag, tag.get_rect(midtop=(cx, 712)))

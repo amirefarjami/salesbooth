@@ -82,16 +82,40 @@ class FreeProvider(PaymentProvider):
         return PaymentCheck(PaymentStatus.APPROVED, ref="free")
 
 
-class CardReaderProvider(ManualProvider):
-    """Standalone POS card reader next to the booth: the buyer pays on it,
-    the operator sees the approved slip and confirms from the admin panel."""
+class CardReaderProvider(PaymentProvider):
+    """Card reader next to the screen: the booth pushes the amount, the buyer
+    swipes and enters the PIN, the reader reports the result. Fully
+    automatic — no operator approval. Runs on the kiosk's worker thread
+    (it never touches SQLite)."""
 
     name = "card"
 
+    def __init__(self, driver) -> None:
+        self.driver = driver
+
     def start(self, order_id, amount_toman, description) -> PaymentStart:
+        from core.pos import PosError
+
+        try:
+            self.driver.begin(int(amount_toman) * 10, str(order_id))   # PSPs take rial
+        except (PosError, OSError) as e:
+            return PaymentStart(ok=False, provider=self.name, order_id=order_id,
+                                amount=amount_toman,
+                                message_fa=f"کارتخوان جواب نداد ({e})")
         return PaymentStart(ok=True, provider=self.name, order_id=order_id,
                             amount=amount_toman,
-                            message_fa="کارت رو روی کارتخوان بکش؛ اپراتور تأیید می‌کنه")
+                            message_fa="مبلغ روی کارتخوان است؛ کارت بکش و رمز بزن")
+
+    def check(self, start: PaymentStart) -> PaymentCheck:
+        r = self.driver.poll()
+        if r.status == "approved":
+            return PaymentCheck(PaymentStatus.APPROVED, ref=r.ref)
+        if r.status == "declined":
+            return PaymentCheck(PaymentStatus.DECLINED, message_fa=r.message_fa or "کارت پذیرفته نشد")
+        return PaymentCheck(PaymentStatus.PENDING)
+
+    def cancel(self) -> None:
+        self.driver.cancel()
 
 
 METHODS = ("qr", "card")
@@ -107,7 +131,9 @@ def provider_for_method(booth, method: str) -> PaymentProvider:
         from core.zarinpal import ZarinpalProvider  # lazy: imports httpx
 
         return ZarinpalProvider(cfg.zarinpal_merchant_id, cfg.zarinpal_sandbox)
-    return CardReaderProvider(booth)
+    from core.pos import driver_from_config
+
+    return CardReaderProvider(driver_from_config(cfg))
 
 
 def provider_from_config(booth) -> PaymentProvider:
