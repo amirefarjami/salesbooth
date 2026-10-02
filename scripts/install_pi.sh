@@ -31,7 +31,7 @@ sudo apt-get update -y
 sudo apt-get install -y \
   git python3-venv python3-pip python3-dev build-essential \
   libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 libsdl2-ttf-2.0-0 \
-  python3-lgpio sqlite3 avahi-daemon network-manager
+  python3-lgpio sqlite3 avahi-daemon network-manager i2c-tools
 
 # 2) python venv + deps ----------------------------------------------------
 # --system-site-packages: lets the venv see apt's python3-lgpio (the GPIO
@@ -59,8 +59,10 @@ if [ ! -f booth.toml ]; then
   echo "created booth.toml (edit it: payment, GPIO pins, screen_rotate)"
 fi
 
-# 5) user groups: display, input, sound, GPIO ------------------------------
-sudo usermod -aG video,render,input,audio,gpio "$RUN_USER" || true
+# 5) I2C on (PCF8574 button module) + user groups: display, input, sound,
+#    GPIO, I2C ----------------------------------------------------------------
+sudo raspi-config nonint do_i2c 0 || echo "!! enable I2C by hand: sudo raspi-config → Interface Options → I2C"
+sudo usermod -aG video,render,input,audio,gpio,i2c "$RUN_USER" || true
 
 if [ "$MODE" = "test" ]; then
   # demo catalog with generated product pictures

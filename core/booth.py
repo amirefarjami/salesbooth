@@ -21,9 +21,9 @@ class Booth:
         self.stats = Stats(conn)
 
     @classmethod
-    def open(cls, config: Config | None = None) -> "Booth":
+    def open(cls, config: Config | None = None, *, shared: bool = False) -> "Booth":
         cfg = config or load_config()
-        conn = connect(cfg.db_path)
+        conn = connect(cfg.db_path, shared=shared)
         init_schema(conn)
         return cls(cfg, conn)
 

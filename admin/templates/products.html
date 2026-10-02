@@ -1,64 +1,75 @@
 {% extends "base.html" %}
 {% set nav = 'products' %}
 {% block body %}
-<div class="panel muted" style="font-size:14px; line-height:1.9">
-  باجه فقط <b>۶ محصولِ فعال</b> را نشان می‌دهد، به ترتیبِ عدد «ترتیب» (کوچک‌تر = جلوتر).
-  اولی کنار دکمه‌ی ۱ (چپ، بالا) است، دومی کنار دکمه‌ی ۲ (راست، بالا)، سومی ۳ (چپ، وسط) و …
-  ستون «روی باجه» نشان می‌دهد هر محصول کنار کدام دکمه است.
-  تغییرات بعد از برگشت باجه به صفحه‌ی اول دیده می‌شوند.
+<div class="card flat" style="background:var(--hi-2)">
+  <b>چه محصولی کنار کدام دکمه است؟</b>
+  <p class="muted" style="color:var(--ink)">
+    باجه فقط <b>۶ محصولِ فعال</b> را نشان می‌دهد، به ترتیب عدد «ترتیب» (کوچک‌تر = جلوتر):
+    ۱ چپ‌بالا، ۲ راست‌بالا، ۳ چپ‌وسط، ۴ راست‌وسط، ۵ چپ‌پایین، ۶ راست‌پایین.
+    تغییرات از خرید بعدی روی باجه دیده می‌شوند.
+  </p>
 </div>
 
-<div class="panel">
-  <h2>محصول جدید</h2>
-  <form method="post" action="/admin/products/create" enctype="multipart/form-data">
-    <div class="row" style="flex-wrap:wrap">
-      <input name="name" placeholder="نام محصول" style="flex:2; min-width:180px" required>
-      <input name="price_toman" type="number" min="0" placeholder="قیمت (تومان)" style="flex:1; min-width:130px" required>
-      <input name="stock" type="number" min="0" value="5" placeholder="موجودی" title="موجودی" style="flex:1; min-width:90px">
-      <input name="sort_order" type="number" value="0" placeholder="ترتیب" title="ترتیب (جای روی باجه)" style="max-width:80px">
+<details class="card" {% if not products %}open{% endif %}>
+  <summary style="cursor:pointer; list-style:none"><h2 style="display:inline">➕ محصول جدید</h2></summary>
+  <form method="post" action="/admin/products/create" enctype="multipart/form-data" style="margin-top:10px">
+    <div class="grid wide">
+      <label class="f full">نام محصول (کوتاه، روی باجه می‌آید)<input name="name" required></label>
+      <label class="f">قیمت (تومان)<input name="price_toman" type="number" inputmode="numeric" min="0" required></label>
+      <label class="f">موجودی داخل ویترین<input name="stock" type="number" inputmode="numeric" min="0" value="5"></label>
+      <label class="f">ترتیب (جای روی باجه)<input name="sort_order" type="number" inputmode="numeric" value="{{ products|length + 1 }}"></label>
+      <label class="check"><input type="checkbox" name="active" checked> روی باجه نشان بده</label>
+      <label class="f full">عکس (از گالری یا دوربین)<input type="file" name="image" accept="image/*"></label>
     </div>
-    <div class="row" style="margin-top:8px">
-      <input type="file" name="image" accept="image/*">
-      <label class="muted"><input type="checkbox" name="active" checked style="width:auto"> فعال</label>
-      <button type="submit">➕ افزودن</button>
-    </div>
+    <div class="actions"><button type="submit" class="primary grow">افزودن محصول</button></div>
   </form>
-</div>
+</details>
 
-<div class="panel">
-  <h2>محصولات ({{ products|length }})</h2>
-  <table>
-    <tr><th>عکس</th><th>روی باجه</th><th>نام · قیمت (تومان) · موجودی · ترتیب · فعال · عکس تازه</th></tr>
-    {% for p in products %}
-    <tr class="{% if p.stock == 0 %}low{% endif %}">
-      <td>
-        {% if p.image_path %}<img class="thumb" src="/admin/img/{{ p.image_path }}">{% else %}<span class="muted">—</span>{% endif %}
-      </td>
-      <td style="text-align:center">{% if on_booth.get(p.id) %}<b class="price">دکمه‌ی {{ on_booth[p.id] }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td>
-        <form method="post" action="/admin/products/{{ p.id }}/update" enctype="multipart/form-data"
-              class="inline" style="width:100%">
-          <input name="name" value="{{ p.name }}" style="flex:2; min-width:150px">
-          <input name="price_toman" type="number" value="{{ p.price_toman }}" style="max-width:120px">
-          <input name="stock" type="number" value="{{ p.stock }}" style="max-width:80px">
-          <input name="sort_order" type="number" value="{{ p.sort_order }}" style="max-width:70px">
-          <label class="muted"><input type="checkbox" name="active" {% if p.active %}checked{% endif %} style="width:auto"> فعال</label>
-          <input type="file" name="image" accept="image/*" style="max-width:170px">
-          <button class="small">💾 ذخیره</button>
-        </form>
-        <form method="post" action="/admin/products/{{ p.id }}/delete" class="inline"
-              onsubmit="return confirm('حذف {{ p.name }}؟ (اگر قبلاً فروخته شده، فقط غیرفعال می‌شود تا گزارش‌ها بمانند)')">
-          <button class="small danger">🗑</button>
-        </form>
-        <form method="post" action="/admin/products/{{ p.id }}/stock" class="inline">
-          <input type="hidden" name="delta" value="1"><button class="small">+۱</button>
-        </form>
-        <form method="post" action="/admin/products/{{ p.id }}/stock" class="inline">
-          <input type="hidden" name="delta" value="-1"><button class="small">−۱</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
+<h2 style="color:#fff; margin-top:18px">محصولات ({{ products|length|fa }})</h2>
+{% for p in products %}
+<div class="card" {% if not p.active %}style="opacity:.75"{% endif %}>
+  <div class="row">
+    {% if p.image_path %}<img class="thumb" src="/admin/img/{{ p.image_path }}" alt="">
+    {% else %}<div class="thumb" style="display:flex;align-items:center;justify-content:center" aria-hidden="true">—</div>{% endif %}
+    <div class="grow">
+      <div class="name">{{ p.name }}</div>
+      <div class="price">{{ p.price_toman|toman }}</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px">
+        {% if on_booth.get(p.id) %}<span class="pill alt">دکمه‌ی {{ on_booth[p.id]|fa }}</span>
+        {% elif p.active %}<span class="pill">روی باجه نیست (بعد از ۶ تای اول)</span>
+        {% else %}<span class="pill">غیرفعال</span>{% endif %}
+        <span class="pill {% if p.stock == 0 %}bad{% elif p.stock <= 2 %}hi{% else %}ok{% endif %}">موجودی {{ p.stock|fa }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <form method="post" action="/admin/products/{{ p.id }}/stock"><input type="hidden" name="delta" value="1">
+      <button class="grow" aria-label="یکی اضافه به موجودی">+۱ موجودی</button></form>
+    <form method="post" action="/admin/products/{{ p.id }}/stock"><input type="hidden" name="delta" value="-1">
+      <button class="grow" aria-label="یکی کم از موجودی">−۱ موجودی</button></form>
+  </div>
+
+  <details style="margin-top:12px">
+    <summary style="cursor:pointer; font-weight:700">✏️ ویرایش</summary>
+    <form method="post" action="/admin/products/{{ p.id }}/update" enctype="multipart/form-data" style="margin-top:10px">
+      <div class="grid wide">
+        <label class="f full">نام<input name="name" value="{{ p.name }}" required></label>
+        <label class="f">قیمت (تومان)<input name="price_toman" type="number" inputmode="numeric" min="0" value="{{ p.price_toman }}"></label>
+        <label class="f">موجودی<input name="stock" type="number" inputmode="numeric" min="0" value="{{ p.stock }}"></label>
+        <label class="f">ترتیب<input name="sort_order" type="number" inputmode="numeric" value="{{ p.sort_order }}"></label>
+        <label class="check"><input type="checkbox" name="active" {% if p.active %}checked{% endif %}> روی باجه نشان بده</label>
+        <label class="f full">عکس تازه (اختیاری)<input type="file" name="image" accept="image/*"></label>
+      </div>
+      <div class="actions"><button class="primary grow">💾 ذخیره</button></div>
+    </form>
+    <form method="post" action="/admin/products/{{ p.id }}/delete" class="actions"
+          onsubmit="return confirm('حذف «{{ p.name }}»؟ اگر قبلاً فروخته شده، فقط غیرفعال می‌شود تا گزارش‌ها بمانند.')">
+      <button class="danger grow">🗑 حذف محصول</button>
+    </form>
+  </details>
 </div>
+{% else %}
+<div class="card"><p class="muted">هنوز محصولی نیست. از «محصول جدید» اضافه کنید.</p></div>
+{% endfor %}
 {% endblock %}

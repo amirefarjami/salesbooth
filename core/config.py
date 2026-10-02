@@ -106,6 +106,17 @@ class Config:
     red_light_enabled: bool = True
     red_light_gpio: int = 22
 
+    # --- where the 8 panel buttons come from ---
+    # "pcf8574": I2C expander module (P0..P7); "keyboard": USB encoder /
+    # keyboard only. The keyboard keymap below always works as well.
+    buttons_source: str = "keyboard"
+    i2c_bus: int = 1
+    pcf8574_address: int = 0x20       # 0x20-0x27 (PCF8574) or 0x38-0x3F (PCF8574A)
+    pcf8574_pins: dict = field(default_factory=lambda: {
+        "slot1": 0, "slot2": 1, "slot3": 2, "slot4": 3,
+        "slot5": 4, "slot6": 5, "confirm": 6, "cancel": 7,
+    })
+
     # --- hardware buttons (USB encoder keymap: key names or codes) ---
     keymap: dict = field(default_factory=lambda: {
         "slot1": "1", "slot2": "2", "slot3": "3",
@@ -176,7 +187,7 @@ def _apply_env(cfg: Config, env: dict | None = None) -> None:
             if isinstance(cur, bool):
                 setattr(cfg, f.name, raw.strip().lower() in ("1", "true", "yes", "on"))
             elif isinstance(cur, int):
-                setattr(cfg, f.name, int(raw))
+                setattr(cfg, f.name, int(raw, 0))     # "0x20" works too
             elif isinstance(cur, float):
                 setattr(cfg, f.name, float(raw))
             elif isinstance(cur, list):

@@ -2,56 +2,131 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}باجه چیز{% endblock %}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#244085">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="باجه چیز">
+<link rel="apple-touch-icon" href="/admin/static/img/chiz-logo.png">
+<link rel="icon" href="/admin/static/img/chiz-logo.png">
+<title>{% block title %}باجه چیز — پنل{% endblock %}</title>
 <style>
+  @font-face { font-family: "Vazirmatn"; font-weight: 400; font-display: swap;
+    src: url("/admin/static/fonts/Vazirmatn-Regular.ttf") format("truetype"); }
+  @font-face { font-family: "Vazirmatn"; font-weight: 700; font-display: swap;
+    src: url("/admin/static/fonts/Vazirmatn-Bold.ttf") format("truetype"); }
+  @font-face { font-family: "Lalezar"; font-display: swap;
+    src: url("/admin/static/fonts/Lalezar-Regular.ttf") format("truetype"); }
+
+  /* CHIZ brand tokens — same as the booth screen (kiosk/theme.py) */
   :root{
-    --bg:#0a0c22; --panel:#161c44; --panel2:#26307a; --line:#5668c8;
-    --line-hi:#8ca0ff; --cream:#fff0c8; --amber:#ffc43c; --red:#e83030;
-    --green:#3cdc78; --gray:#828cb4;
+    --ink:#2e2e33; --paper:#ffffff; --paper-2:#e4e9f4; --muted:#46507a;
+    --hi:#fff100; --hi-2:#fff8a8; --alt:#7b3e95; --stage:#244085;
+    --danger:#ec1f24; --ok:#0a7a3a; --line:#c3cad9; --r:12px;
   }
-  *{box-sizing:border-box; margin:0; padding:0;}
-  body{background:var(--bg); color:var(--cream);
-    font-family:Tahoma, "Vazirmatn", sans-serif; font-size:16px; padding-bottom:80px;}
-  h1,h2{color:var(--amber); margin:16px 0;}
-  a{color:var(--line-hi); text-decoration:none;}
-  .wrap{max-width:760px; margin:0 auto; padding:12px;}
-  nav{display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 20px;}
-  nav a{background:var(--panel); border:2px solid var(--line); padding:8px 14px;
-    color:var(--cream); font-weight:bold;}
-  nav a.active{border-color:var(--amber); color:var(--amber);}
-  .panel{background:var(--panel); border:2px solid var(--line); padding:14px; margin:14px 0;}
-  table{width:100%; border-collapse:collapse; font-size:14px;}
-  th,td{border:1px solid var(--line); padding:7px 8px; text-align:right;}
-  th{background:var(--panel2); color:var(--amber);}
-  tr.low td{background:#3a1020;}
-  input,select{background:var(--bg); border:2px solid var(--line); color:var(--cream);
-    padding:8px; font-size:15px; width:100%;}
-  button{background:var(--panel2); border:2px solid var(--line-hi); color:var(--cream);
-    padding:8px 16px; font-weight:bold; cursor:pointer; font-size:15px;}
-  button.danger{border-color:var(--red); color:#ff9c9c;}
-  button.small{padding:4px 10px; font-size:13px;}
-  .row{display:flex; gap:8px; align-items:center;}
-  .price{color:var(--amber); font-weight:bold; white-space:nowrap;}
-  .ok{color:var(--green);} .bad{color:var(--red);}
-  .muted{color:var(--gray); font-size:13px;}
-  img.thumb{width:64px; height:64px; object-fit:cover; border:2px solid var(--line);}
-  form.inline{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
-  .flash{background:#123c22; border:2px solid var(--green); padding:10px; margin:10px 0;}
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--stage); color:var(--ink); font-family:"Vazirmatn",Tahoma,sans-serif;
+    font-size:16px; line-height:1.6; min-height:100vh;
+    padding:0 0 calc(32px + env(safe-area-inset-bottom));}
+  a{color:inherit}
+  .wrap{max-width:820px; margin:0 auto; padding:12px 14px}
+
+  /* header + nav (sticky, thumb-friendly) */
+  header.top{position:sticky; top:0; z-index:10; background:var(--stage);
+    border-bottom:4px solid var(--danger); padding:8px 12px; padding-top:max(8px, env(safe-area-inset-top))}
+  .brand{display:flex; align-items:center; gap:10px; max-width:820px; margin:0 auto}
+  .brand img{height:34px; width:auto}
+  .brand .grow{flex:1}
+  .brand form button{min-height:36px; padding:0 12px; font-size:14px; font-weight:400;
+    background:transparent; color:#fff; border-color:#fff; box-shadow:none}
+  .brand h1{font-family:"Lalezar","Vazirmatn",sans-serif; font-weight:400; color:var(--hi);
+    font-size:22px; line-height:1}
+  nav{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; max-width:820px; margin:8px auto 0}
+  nav a{display:flex; align-items:center; justify-content:center; min-height:44px;
+    background:var(--paper); color:var(--ink); border:2px solid var(--ink); border-radius:10px;
+    font:700 14px "Vazirmatn",sans-serif; text-decoration:none; padding:0 6px; text-align:center;
+    box-shadow:2px 2px 0 var(--ink)}
+  nav a.active{background:var(--hi)}
+
+  h2{font-family:"Lalezar","Vazirmatn",sans-serif; font-weight:400; font-size:22px; margin:0 0 10px}
+  .card{background:var(--paper); border:3px solid var(--ink); border-radius:var(--r);
+    box-shadow:4px 4px 0 var(--ink); padding:14px; margin:14px 0}
+  .card.flat{box-shadow:none}
+  .muted{color:var(--muted); font-size:14px}
+  .ok{color:var(--ok); font-weight:700} .bad{color:var(--danger); font-weight:700}
+  .price{font-weight:700; white-space:nowrap}
+  .pill{display:inline-block; border:2px solid var(--ink); border-radius:999px; padding:0 10px;
+    font-size:13px; font-weight:700; background:var(--paper-2); white-space:nowrap}
+  .pill.hi{background:var(--hi)} .pill.ok{background:#d6f5e1; color:var(--ok)}
+  .pill.bad{background:#fde0e1; color:var(--danger)} .pill.alt{background:var(--alt); color:#fff}
+
+  /* forms: 16px inputs (no iOS zoom), 44px targets, labels above fields */
+  label.f{display:block; font-size:13px; color:var(--muted); font-weight:700}
+  input, select{display:block; width:100%; margin-top:4px; min-height:44px; font:16px "Vazirmatn",sans-serif;
+    color:var(--ink); background:#fff; border:2px solid var(--ink); border-radius:10px; padding:8px 10px}
+  input[type=file]{padding:8px; font-size:14px; background:var(--paper-2)}
+  input:focus{outline:3px solid var(--alt); outline-offset:1px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .grid .full{grid-column:1 / -1}
+  .check{display:flex; align-items:center; gap:8px; min-height:44px; font-weight:700}
+  .check input{width:24px; height:24px; min-height:0; margin:0}
+
+  button, .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px;
+    padding:0 16px; font:700 16px "Vazirmatn",sans-serif; color:var(--ink); background:var(--paper);
+    border:2px solid var(--ink); border-radius:10px; box-shadow:3px 3px 0 var(--ink);
+    cursor:pointer; text-decoration:none; -webkit-tap-highlight-color:transparent}
+  button:active, .btn:active{transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink)}
+  button.primary, .btn.primary{background:var(--hi)}
+  button.danger{background:#fff; color:var(--danger); border-color:var(--danger); box-shadow:3px 3px 0 var(--danger)}
+  button.go{background:var(--ok); color:#fff}
+  .actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+  .actions form{display:contents}
+  .actions .grow{flex:1 1 140px}
+
+  /* stat tiles */
+  .tiles{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .tile{background:var(--paper-2); border:2px solid var(--ink); border-radius:10px; padding:10px 12px}
+  .tile b{display:block; font-size:24px; line-height:1.3}
+
+  /* simple tables, scroll sideways only inside their card if ever needed */
+  .table-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch}
+  table{width:100%; border-collapse:collapse; font-size:15px}
+  th, td{border-bottom:1px solid var(--line); padding:8px 6px; text-align:right; vertical-align:top}
+  th{font-size:13px; color:var(--muted)}
+
+  .flash{background:var(--hi-2); border:2px solid var(--ink); border-radius:10px; padding:10px 12px; margin:12px 0}
+  img.thumb{width:72px; height:72px; object-fit:cover; border:2px solid var(--ink); border-radius:10px;
+    background:var(--paper-2); flex:none}
+  .row{display:flex; gap:12px; align-items:center}
+  .row .grow{flex:1; min-width:0}
+  .name{font-weight:700; font-size:17px; overflow-wrap:anywhere}
+
+  @media (max-width: 360px){
+    nav a{font-size:13px; padding:0 2px}
+    .tile b{font-size:20px}
+  }
+  @media (min-width: 700px){
+    .grid.wide{grid-template-columns:2fr 1fr 1fr 1fr}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>🕹️ باجه چیز — پنل مدیریت</h1>
-  {% if not hide_nav %}
+{% if not hide_nav %}
+<header class="top">
+  <div class="brand">
+    <img src="/admin/static/img/chiz-wordmark.png" alt="">
+    <h1 class="grow">پنل باجه</h1>
+    <form method="post" action="/admin/logout"><button>خروج</button></form>
+  </div>
   <nav>
     <a href="/admin" {% if nav=='home' %}class="active"{% endif %}>داشبورد</a>
     <a href="/admin/products" {% if nav=='products' %}class="active"{% endif %}>محصولات</a>
     <a href="/admin/orders" {% if nav=='orders' %}class="active"{% endif %}>سفارش‌ها</a>
     <a href="/admin/reports" {% if nav=='reports' %}class="active"{% endif %}>گزارش</a>
-    <form method="post" action="/admin/logout" class="inline"><button class="small">خروج</button></form>
   </nav>
-  {% endif %}
+</header>
+{% endif %}
+<div class="wrap">
   {% block body %}{% endblock %}
 </div>
 </body>

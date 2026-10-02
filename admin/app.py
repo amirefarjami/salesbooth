@@ -27,17 +27,55 @@ _MAX_IMG_BYTES = 20 * 1024 * 1024   # phone photos; re-encoded small on save
 _IMG_MAX_SIDE = 600                 # plenty for the 480×800 booth screen
 
 app = FastAPI(title="CHIZ Booth Admin", docs_url=None, redoc_url=None)
+
+# the panel's own fonts and logo (phones don't have Vazirmatn installed)
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from core.config import ASSETS_DIR  # noqa: E402
+
+app.mount("/admin/static", StaticFiles(directory=str(ASSETS_DIR)), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-templates.env.filters["toman"] = lambda v: format_toman(v)
-templates.env.filters["jalali"] = lambda v: jalali_date_time(v)
+from core.fa import fa_digits  # noqa: E402
+
+templates.env.filters["toman"] = lambda v: fa_digits(format_toman(v))   # ۱۵۰,۰۰۰ تومان
+templates.env.filters["fa"] = lambda v: fa_digits(v)
+
+
+def _jday(v) -> str:
+    """'2026-10-01' → '۱۴۰۵/۰۷/۰۹' (report rows are Gregorian days)."""
+    from core.format import to_jalali
+    try:
+        y, m, d = (int(x) for x in str(v)[:10].split("-"))
+        jy, jm, jd = to_jalali(y, m, d)
+        return fa_digits(f"{jy}/{jm:02d}/{jd:02d}")
+    except (ValueError, TypeError):
+        return fa_digits(v)
+
+
+templates.env.filters["jday"] = _jday
+templates.env.filters["jalali"] = lambda v: fa_digits(jalali_date_time(v))
 
 _state: dict = {"booth": None, "tokens": set()}
 
 
-def get_booth() -> Booth:
-    if _state["booth"] is None:
-        _state["booth"] = Booth.open()
-    return _state["booth"]
+def get_booth():
+    """One fresh DB connection per request.
+
+    FastAPI runs these sync endpoints on a thread pool, and a SQLite
+    connection made on one thread refuses to work on another — a single
+    long-lived connection gave random «Internal Server Error» pages. The
+    connection is opened in shared mode because FastAPI may enter this
+    dependency and run the endpoint on different pool threads; it is never
+    used by two requests at once. Re-reading booth.toml per request also
+    means a new admin_pin works without a restart.
+    """
+    if _state["booth"] is not None:          # tests inject their own
+        yield _state["booth"]
+        return
+    booth = Booth.open(shared=True)
+    try:
+        yield booth
+    finally:
+        booth.close()
 
 
 # ---------------------------------------------------------------- auth

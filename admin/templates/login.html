@@ -2,12 +2,18 @@
 {% set hide_nav = true %}
 {% block title %}ورود — باجه چیز{% endblock %}
 {% block body %}
-<div class="panel" style="max-width:360px; margin:60px auto;">
-  <h2>ورود مدیریت</h2>
-  {% if error %}<p class="bad">{{ error }}</p>{% endif %}
+<div style="text-align:center; margin:36px 0 8px">
+  <img src="/admin/static/img/chiz-logo.png" alt="چیز" style="width:150px; height:auto">
+</div>
+<div class="card" style="max-width:380px; margin:14px auto">
+  <h2>ورود به پنل باجه</h2>
+  {% if error %}<p class="flash bad">{{ error }}</p>{% endif %}
   <form method="post" action="/admin/login">
-    <p><input type="password" name="pin" placeholder="PIN" inputmode="numeric" autofocus></p>
-    <button type="submit">ورود</button>
+    <label class="f">PIN
+      <input type="password" name="pin" inputmode="numeric" autocomplete="current-password" autofocus required>
+    </label>
+    <div class="actions"><button type="submit" class="primary grow">ورود</button></div>
   </form>
+  <p class="muted" style="margin-top:12px">PIN را از <code>booth.toml</code> (<code>admin_pin</code>) عوض کنید.</p>
 </div>
 {% endblock %}

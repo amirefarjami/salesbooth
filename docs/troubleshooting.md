@@ -23,11 +23,13 @@ journalctl -u chiz-kiosk -b --no-pager | tail -60
 
 | علامت | راه‌حل |
 |---|---|
-| هیچ دکمه‌ای کار نمی‌کند (در حالت کیوسک) | کاربر باید در گروه `input` باشد (`groups`)؛ بعد از نصب `sudo reboot` |
-| هیچ دکمه‌ای کار نمی‌کند ولی کیبورد کار می‌کند | انکودر مثل دسته‌ی بازی است: `make factory-test` ← اسم‌ها (`joy0` …) ← `[booth.keymap]` ([wiring.md](wiring.md) بخش ۱) |
+| هیچ دکمه‌ای کار نمی‌کند | `i2cdetect -y 1`: آدرس ماژول PCF8574 دیده می‌شود؟ نه → سیم‌های VCC (پایه ۱، ۳٫۳ ولت)، GND، SDA (پایه ۳)، SCL (پایه ۵) و روشن بودن I2C. آدرس فرق دارد → `pcf8574_address` در `booth.toml`. بعد از نصب یک بار `sudo reboot` (گروه `i2c`) |
+| در لاگ: `BUTTONS: PCF8574 … No such file` | I2C خاموش است: `sudo raspi-config` ← Interface Options ← I2C ← Yes |
+| یک دکمه کار نمی‌کند یا کالای اشتباه را برمی‌دارد | `make factory-test` ← پایه‌ی آن دکمه (`P0`…) را ببین ← سیمش یا `[booth.pcf8574_pins]` |
+| (با انکودر USB) کیبورد کار می‌کند ولی دکمه‌ها نه | انکودر مثل دسته‌ی بازی است: `make factory-test` ← اسم‌ها (`joy0` …) ← `[booth.keymap]` ([wiring.md](wiring.md) بخش ۱) |
 | factory-test باز نمی‌شود (در حالت کیوسک) | باجه صفحه را گرفته: `sudo systemctl stop chiz-kiosk`، بعد از تست `start` |
-| دکمه‌ای کالای اشتباه را برمی‌دارد | `make factory-test` → ببین هر دکمه چه کلیدی می‌فرستد → `[booth.keymap]` را در `booth.toml` درست کن |
-| با کیبورد کار می‌کند ولی با انکودر نه | انکودر را جدا امتحان کن: `sudo evtest` (با `sudo apt install evtest`) |
+| (با انکودر USB) دکمه‌ای کالای اشتباه را برمی‌دارد | `make factory-test` → ببین هر دکمه چه کلیدی می‌فرستد → `[booth.keymap]` را در `booth.toml` درست کن |
+
 
 ## قفل، سنسور در، نورها
 
@@ -62,8 +64,9 @@ journalctl -u chiz-kiosk -b --no-pager | tail -60
 
 | علامت | راه‌حل |
 |---|---|
+| صفحه‌ای از پنل «Internal Server Error» می‌دهد | نسخه‌ی قدیمی است (این مشکل رفع شده): [به‌روزرسانی](setup-pi.md#۴-به‌روزرسانی-برنامه) و `sudo systemctl restart chiz-admin` |
 | `chiz.local:8000` باز نمی‌شود | IP: `hostname -I` → `http://IP:8000/admin`؛ `systemctl status chiz-admin` |
-| PIN را فراموش کردم | `admin_pin` در `booth.toml` → `sudo systemctl restart chiz-admin` |
+| PIN را فراموش کردم | `admin_pin` در `booth.toml` را عوض کن؛ از ورود بعدی اعمال می‌شود |
 
 ## داغ شدن و خاموشی
 

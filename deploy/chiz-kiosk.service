@@ -11,7 +11,7 @@ Type=simple
 User=pi
 # draw straight to the display without X/Wayland (SDL2: kmsdrm; the old
 # SDL1 "fbcon" driver does not exist in pygame 2 and the UI never opened)
-SupplementaryGroups=video render input audio gpio
+SupplementaryGroups=video render input audio gpio i2c
 WorkingDirectory=/home/pi/salesbooth
 Environment=SDL_VIDEODRIVER=kmsdrm
 Environment=SDL_AUDIODRIVER=alsa
