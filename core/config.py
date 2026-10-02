@@ -71,6 +71,7 @@ class Config:
     payment_provider: str = "manual"
     zarinpal_merchant_id: str = ""
     zarinpal_sandbox: bool = True
+    payment_methods: list = field(default_factory=lambda: ["qr", "card"])
     payment_poll_seconds: float = 3.0
     payment_timeout_s: int = 180      # give up waiting after this
 
@@ -81,8 +82,18 @@ class Config:
     lock_enabled: bool = True         # auto-simulated when no GPIO lib
     lock_gpio: int = 17               # BCM pin driving the relay
     lock_active_high: bool = True     # relay board polarity
-    door_open_s: int = 20             # unlock window after payment (15-25)
+    door_open_s: int = 20             # countdown once the door is opened (15-25)
     door_warn_s: int = 5              # last N seconds: red light + alarm
+    door_wait_s: int = 60             # unlocked but never opened → relock
+
+    # --- door sensor (reed switch: closed door pulls the pin low) ---
+    door_sensor_enabled: bool = True  # auto-simulated (key "d") without GPIO
+    door_sensor_gpio: int = 27
+    door_open_when_high: bool = True
+
+    # --- light inside the red confirm button (the only lit button) ---
+    red_light_enabled: bool = True
+    red_light_gpio: int = 22
 
     # --- hardware buttons (USB encoder keymap: key names or codes) ---
     keymap: dict = field(default_factory=lambda: {
@@ -90,7 +101,7 @@ class Config:
         "slot4": "4", "slot5": "5", "slot6": "6",
         "confirm": "return",
         "cancel": "escape",
-        "up": "up", "down": "down", "left": "left", "right": "right",
+        "door_sim": "d",              # laptop only: open/close the door
     })
 
     # --- runtime flags (not user-facing) ---
@@ -157,6 +168,8 @@ def _apply_env(cfg: Config, env: dict | None = None) -> None:
                 setattr(cfg, f.name, int(raw))
             elif isinstance(cur, float):
                 setattr(cfg, f.name, float(raw))
+            elif isinstance(cur, list):
+                setattr(cfg, f.name, [x.strip() for x in raw.split(",") if x.strip()])
             elif isinstance(cur, Path):
                 p = Path(raw)
                 setattr(cfg, f.name, p if p.is_absolute() else PROJECT_ROOT / p)

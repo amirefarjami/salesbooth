@@ -82,8 +82,36 @@ class FreeProvider(PaymentProvider):
         return PaymentCheck(PaymentStatus.APPROVED, ref="free")
 
 
+class CardReaderProvider(ManualProvider):
+    """Standalone POS card reader next to the booth: the buyer pays on it,
+    the operator sees the approved slip and confirms from the admin panel."""
+
+    name = "card"
+
+    def start(self, order_id, amount_toman, description) -> PaymentStart:
+        return PaymentStart(ok=True, provider=self.name, order_id=order_id,
+                            amount=amount_toman,
+                            message_fa="کارت رو روی کارتخوان بکش؛ اپراتور تأیید می‌کنه")
+
+
+METHODS = ("qr", "card")
+
+
+def provider_for_method(booth, method: str) -> PaymentProvider:
+    """Provider behind a payment method the buyer picks on the screen.
+    payment_provider = "free" turns every method into instant test approval."""
+    cfg = booth.config
+    if (cfg.payment_provider or "").lower() == "free":
+        return FreeProvider()
+    if method == "qr":
+        from core.zarinpal import ZarinpalProvider  # lazy: imports httpx
+
+        return ZarinpalProvider(cfg.zarinpal_merchant_id, cfg.zarinpal_sandbox)
+    return CardReaderProvider(booth)
+
+
 def provider_from_config(booth) -> PaymentProvider:
-    """manual | free | zarinpal (from config.payment_provider)."""
+    """Legacy single-provider setup (manual | free | zarinpal)."""
     kind = (booth.config.payment_provider or "manual").lower()
     if kind == "free":
         return FreeProvider()

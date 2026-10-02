@@ -35,13 +35,20 @@ def test_raw_codes_accepted():
     assert key_code("1073741906") == K_UP
 
 
-def test_default_keymap_maps_all_actions():
+def test_default_keymap_is_the_eight_buttons():
     m = build_action_map(Config())
-    assert set(m.values()) == set(Action)
+    assert set(m.values()) == {*SLOT_ACTIONS, Action.CONFIRM, Action.CANCEL,
+                               Action.DOOR_SIM}
     assert m[13] == Action.CONFIRM
     assert m[27] == Action.CANCEL
-    assert m[K_UP] == Action.UP
+    assert m[ord("d")] == Action.DOOR_SIM
     assert [m[ord(str(i))] for i in range(1, 7)] == list(SLOT_ACTIONS)
+
+
+def test_joystick_keys_still_mappable():
+    cfg = Config()
+    cfg.keymap = {"up": "up", "down": "down"}
+    assert build_action_map(cfg)[K_UP] == Action.UP
 
 
 def test_custom_keymap():

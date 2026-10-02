@@ -146,3 +146,26 @@ def test_jalali_conversion():
     jy, jm, jd = to_jalali(2026, 9, 30)
     assert jy == 1405 and jm == 7 and jd == 8
     assert jalali_date("2026-09-30 14:03:00") == "1405/07/08"
+
+
+def test_cart_order_reserves_all_lines(db, catalog):
+    orders = OrderRepo(db)
+    ids = {p.name: p.id for p in catalog.list_all()}
+    owi = orders.create_cart({ids["دستگاه دستی بلی"]: 2, ids["پک انرژی"]: 1}, provider="card")
+    assert owi.order.total_toman == 2 * 150000 + 120000
+    assert {(i.name, i.qty) for i in owi.items} == {("دستگاه دستی بلی", 2), ("پک انرژی", 1)}
+    stock = {p.name: p.stock for p in catalog.list_all()}
+    assert stock["دستگاه دستی بلی"] == 3 and stock["پک انرژی"] == 2
+    orders.cancel(owi.order.id)
+    stock = {p.name: p.stock for p in catalog.list_all()}
+    assert stock["دستگاه دستی بلی"] == 5 and stock["پک انرژی"] == 3
+
+
+def test_cart_order_is_all_or_nothing(db, catalog):
+    orders = OrderRepo(db)
+    ids = {p.name: p.id for p in catalog.list_all()}
+    with pytest.raises(OutOfStock):
+        orders.create_cart({ids["دستگاه دستی بلی"]: 1, ids["مارچوبه سرد"]: 1})
+    assert {p.name: p.stock for p in catalog.list_all()}["دستگاه دستی بلی"] == 5
+    with pytest.raises(OrderError):
+        orders.create_cart({})
