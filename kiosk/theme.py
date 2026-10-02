@@ -178,14 +178,18 @@ def arrow(surf, tip, size: int, direction: str = "left", color=K["ink"]) -> None
 
 def ring_progress(surf, center, radius: int, width: int, frac: float,
                   color, track=K["paper_2"]) -> None:
-    """Countdown ring: paper track + coloured arc (frac 1 = full)."""
+    """Countdown ring: paper track + coloured arc (frac 1 = full).
+
+    RTL: the coloured part runs CLOCKWISE from 12 o'clock, so as time runs
+    out the empty part opens at the top and grows from the LEFT,
+    counter-clockwise."""
     rect = pygame.Rect(0, 0, radius * 2, radius * 2)
     rect.center = center
     pygame.draw.circle(surf, track, center, radius, width)
     frac = max(0.0, min(1.0, frac))
     if frac > 0:
         start = math.pi / 2
-        end = start + frac * 2 * math.pi
+        end = start - frac * 2 * math.pi        # clockwise (screen y is flipped below)
         # draw as thick polyline of small arcs (pygame arc leaves gaps)
         steps = max(2, int(90 * frac))
         for i in range(steps):

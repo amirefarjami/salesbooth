@@ -405,6 +405,10 @@ class DoorScreen(Screen):
     led_mode = "door"
     DONE_MS = 2600
 
+    def lights_mode(self) -> str:
+        """MOSFET 1 dims the booth, MOSFET 2 adds the red lights."""
+        return "warn" if self.warning else "normal"
+
     def __init__(self, app, order_id: int, code: str) -> None:
         super().__init__(app)
         self.order_id = order_id
@@ -412,8 +416,11 @@ class DoorScreen(Screen):
         owi = app.booth.orders.get(order_id)
         self.items = [(it.name, it.qty) for it in owi.items] if owi else []
         cfg = app.booth.config
-        self.open_ms = max(5, int(cfg.door_open_s)) * 1000
-        self.warn_ms = max(0, min(int(cfg.door_warn_s), int(cfg.door_open_s) - 1)) * 1000
+        # 20 s for one item, +5 s for every extra item (counted by quantity)
+        units = max(1, sum(q for _, q in self.items))
+        open_s = max(5, int(cfg.door_open_s)) + max(0, int(cfg.door_extra_per_item_s)) * (units - 1)
+        self.open_ms = open_s * 1000
+        self.warn_ms = max(0, min(int(cfg.door_warn_s), open_s - 1)) * 1000
         self.wait_ms = max(10, int(cfg.door_wait_s)) * 1000
         self.has_sensor = bool(getattr(app.door, "enabled", False))
         self.state = "wait"
@@ -482,7 +489,7 @@ class DoorScreen(Screen):
                         self._to("done")
                         return
             if self.warning:
-                beat = self.seconds_left if self.state == "open" else self.state_ms // 1200
+                beat = self.seconds_left if self.state == "open" else self.state_ms // 1000
                 if beat != self._last_beep:
                     self._last_beep = beat
                     self.app.sounds.play("alarm")
