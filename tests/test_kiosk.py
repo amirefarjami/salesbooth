@@ -31,6 +31,7 @@ def app(tmp_path):
     cfg.door_open_s = 6
     cfg.door_warn_s = 2
     cfg.door_wait_s = 10
+    cfg.pos_sim_approve_s = 0          # simulated reader never answers by itself
     a = KioskApp(cfg, headless=True)
     for i, (name, stock) in enumerate(NAMES):
         a.booth.products.create(name, 10_000 * (i + 1), stock=stock, sort_order=i)
@@ -57,10 +58,18 @@ def to_pay(app, method_slot="slot2", products=("slot1",)):
     return app.current
 
 
+def settle(app, pay, ms=8000):
+    """Step until the payment leaves the pay screen (card/QR run threaded)."""
+    for _ in range(ms // 50):
+        app.step(50)
+        if app.current is not pay:
+            return
+
+
 def approve(app, pay, monkeypatch):
     monkeypatch.setattr(pay.provider, "check",
                         lambda start: PaymentCheck(PaymentStatus.APPROVED, ref="t"))
-    app.step(int(app.cfg.payment_poll_seconds * 1000) + 10)
+    settle(app, pay)
 
 
 # --- layout -----------------------------------------------------------------
@@ -119,9 +128,12 @@ def test_red_does_nothing_with_empty_cart(app):
     assert app.current_name == "grid"
 
 
-def test_attract_product_button_adds_directly(app):
-    app.step(16, ["slot1"])
-    assert app.current_name == "grid" and app.cart == {pid(app, "الف"): 1}
+def test_only_red_leaves_attract(app):
+    for key in ("slot1", "slot4", "cancel"):
+        app.step(16, [key])
+        assert app.current_name == "attract"
+    app.step(16, ["confirm"])
+    assert app.current_name == "grid" and app.cart == {}
 
 
 # --- checkout ---------------------------------------------------------------
@@ -181,7 +193,10 @@ def test_cancel_payment_restocks_and_keeps_cart(app):
 def test_payment_timeout_restocks_and_retry(app):
     app.cfg.payment_timeout_s = 1
     pay = to_pay(app)
-    app.step(1500)
+    for _ in range(40):                # the reader starts on a worker thread
+        app.step(50)
+        if pay.status == PaymentStatus.DECLINED:
+            break
     assert pay.status == PaymentStatus.DECLINED
     assert stock(app, "الف") == 3
     assert app.red.mode == "blink"     # red = try again
@@ -206,6 +221,26 @@ def test_idle_timeout_from_grid_clears_cart(app):
 
 
 # --- after payment: success → door ------------------------------------------
+
+def test_card_reader_approves_automatically(app):
+    app.cfg.pos_sim_approve_s = 0.3    # the simulated buyer swipes after 0.3 s
+    app._providers.clear()
+    app.cfg.payment_poll_seconds = 0.1
+    pay = to_pay(app, "slot2")
+    assert pay.provider.driver.amount_rial == 10_000 * 10   # amount went to the reader
+    settle(app, pay)
+    assert app.current_name == "success"
+    assert app.booth.orders.get(pay.order_id).order.status == "paid"
+    assert app.booth.orders.get(pay.order_id).order.provider == "card"
+
+
+def test_cancel_aborts_sale_on_the_reader(app):
+    pay = to_pay(app, "slot2")
+    for _ in range(20):
+        app.step(20)
+    app.step(16, ["cancel"])
+    assert pay.provider.driver.poll().status == "declined"   # sale aborted
+
 
 def test_success_then_door_sensor_flow(app, monkeypatch):
     pay = to_pay(app)

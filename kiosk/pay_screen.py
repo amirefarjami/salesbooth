@@ -72,7 +72,7 @@ class PayScreen(Screen):
         self.since_check_ms = 0
         # network providers run in a worker so the screen never freezes;
         # DB-backed providers (manual/free) stay on the main thread (sqlite)
-        self._threaded = self.provider.name == "zarinpal"
+        self._threaded = self.provider.name in ("zarinpal", "card")  # network / device I/O
         self._pool = ThreadPoolExecutor(max_workers=1) if self._threaded else None
         self._job: Future | None = None
         self.start = None
@@ -180,6 +180,8 @@ class PayScreen(Screen):
                 self.app.open_methods()
             return
         if action == "cancel" and not self.done:
+            if hasattr(self.provider, "cancel"):
+                self.provider.cancel()          # abort the sale on the reader
             self.app.booth.orders.cancel(self.order_id, restock=True)
             self.done = True
             self._shutdown_pool()
@@ -227,10 +229,10 @@ class PayScreen(Screen):
             y += 300
         elif provider == "card":
             _card_icon(surf, (cx, y + 70), K["ink"])
-            lab = t.text("کارتت رو روی کارتخوان کنار باجه بکش", "sm")
+            lab = t.text("مبلغ روی کارتخوان اومده", "sm")
             surf.blit(lab, lab.get_rect(midtop=(cx, y + 130)))
-            sub = t.text("اپراتور رسید رو می‌بینه و تأیید می‌کنه", "xs", K["muted"])
-            surf.blit(sub, sub.get_rect(midtop=(cx, y + 164)))
+            sub = t.text("فقط کارت بکش و رمزت رو بزن", "sm", K["alt"])
+            surf.blit(sub, sub.get_rect(midtop=(cx, y + 162)))
             plate_r = pygame.Rect(0, 0, 220, 96)
             plate_r.midtop = (cx, y + 204)
             plate(surf, plate_r, K["hi"])
@@ -240,7 +242,7 @@ class PayScreen(Screen):
             surf.blit(code, code.get_rect(center=(plate_r.centerx, plate_r.centery + 12)))
             y = plate_r.bottom + 26
             self._draw_dots(surf, cx, y + 8)
-            wait = t.text("منتظر تأیید اپراتور…", "sm", K["muted"])
+            wait = t.text("منتظر تأیید پرداخت…", "sm", K["muted"])
             surf.blit(wait, wait.get_rect(midtop=(cx, y + 30)))
             y += 72
         else:
@@ -253,7 +255,7 @@ class PayScreen(Screen):
             surf.blit(code, code.get_rect(center=(plate_r.centerx, plate_r.centery + 6)))
             y = plate_r.bottom + 30
             self._draw_dots(surf, cx, y + 8)
-            wait = t.text("منتظر تأیید فروشنده…", "sm", K["muted"])
+            wait = t.text("منتظر تأیید پرداخت…", "sm", K["muted"])
             surf.blit(wait, wait.get_rect(midtop=(cx, y + 30)))
             y += 72
 
@@ -276,11 +278,12 @@ class PayScreen(Screen):
         surf.blit(c, c.get_rect(center=cancel.center))
 
     def _draw_dots(self, surf, cx, y) -> None:
-        k = (self.t_ms // 300) % 3
-        for i in range(3):
+        # all three full, then they empty from the right, then refill
+        gone = (self.t_ms // 350) % 4
+        for i in range(3):                  # i = 0 is the leftmost
             r = pygame.Rect(0, 0, 16, 16)
-            r.center = (cx + (1 - i) * 28, y)   # RTL: fills right → left
-            plate(surf, r, K["alt"] if i <= k else K["paper_2"], shadow=2, outline=2)
+            r.center = (cx + (i - 1) * 28, y)
+            plate(surf, r, K["alt"] if i < 3 - gone else K["paper_2"], shadow=2, outline=2)
 
     def _draw_failed(self, surf, t, box) -> None:
         cx = box.centerx
@@ -322,7 +325,7 @@ class SuccessScreen(Screen):
             (rnd.uniform(30, app.theme.w - 30), rnd.uniform(-300, -10),
              rnd.uniform(220, 420), rnd.uniform(0, 6.3), rnd.randint(6, 12),
              cols[i % len(cols)]) for i in range(46)]
-        app.sounds.play("success")
+        app.sounds.play("fanfare")
 
     def tick(self, dt_ms: int) -> None:
         self.t_ms += dt_ms
@@ -519,11 +522,9 @@ class DoorScreen(Screen):
         y = self._draw_items(surf, t, box, y + 12)
         t.sticker(surf, f"کد سفارش {fa_digits(self.code)}", {"midtop": (cx, y + 14)},
                   size="md", fill=K["hi"])
-        msg = t.fit_text("اپراتور در ویترین رو باز می‌کنه", box.w - 40, ("md", "sm"),
-                         K["ink"], "display")
-        surf.blit(msg, msg.get_rect(midtop=(cx, box.top + 420)))
-        sub = t.text("و خریدت رو بهت تحویل می‌ده", "sm", K["muted"])
-        surf.blit(sub, sub.get_rect(midtop=(cx, box.top + 466)))
+        msg = t.fit_text("در ویترین رو باز کن و خریدت رو بردار", box.w - 40,
+                         ("md", "sm"), K["ink"], "display")
+        surf.blit(msg, msg.get_rect(midtop=(cx, box.top + 430)))
         frac = 1 - self.state_ms / self.wait_ms
         bar = pygame.Rect(box.left + 30, box.bottom - 70, box.w - 60, 18)
         t.progress_bar(surf, bar, frac, K["alt"])

@@ -29,8 +29,8 @@ N-th product (admin sort order). Only the first 6 active products are shown.
 ## Hand-over sequence (semi-automatic — an operator is always there)
 
 1. Payment approved → success animation on the screen.
-2. Lock relay ON: the operator opens the showcase and hands over the items
-   listed on the screen (with the order code).
+2. Lock relay ON: the screen says «در ویترین رو باز کن و خریدت رو بردار»
+   and lists the items (with the order code); the operator watches.
 3. Door sensor sees the door open → relay OFF (the latch catches again on
    closing) and the countdown (`door_open_s`, 20 s) starts.
 4. Last `door_warn_s` seconds: red light + alarm; after the countdown the
@@ -39,8 +39,11 @@ N-th product (admin sort order). Only the first 6 active products are shown.
    Door never opened within `door_wait_s` → lock again; the operator can
    mark the order delivered in the admin panel.
 
-Card-reader payments: the buyer pays on the standalone POS; the operator
-checks the slip and presses «رسید کارتخوان رو دیدم — تأیید» in the panel.
+Card-reader payments are automatic: the booth pushes the amount to the
+reader, the buyer only swipes and enters the PIN, and the reader reports the
+result back (`core/pos.py`). The wire protocol depends on the PSP's PC-POS
+spec, so the real driver is added once the device is chosen (TASKS #24);
+until then `pos_driver = "sim"` approves after `pos_sim_approve_s` seconds.
 
 ## Field check
 

@@ -146,6 +146,7 @@ def render(booth, products: list) -> None:
     cfg.lock_enabled = False
     cfg.red_light_enabled = False
     cfg.door_sensor_enabled = True
+    cfg.pos_sim_approve_s = 0          # approve by hand below
     app = KioskApp(cfg, headless=True)
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -206,15 +207,18 @@ def render(booth, products: list) -> None:
     app.current = failed
     snap("8-pay-failed")
 
-    # 9 — approved: success animation
+    # 9 — the reader approves: success animation
+    from core.payment import PaymentCheck, PaymentStatus
     app.current = pay
-    booth.orders.mark_paid(pay.order_id, provider="card", provider_ref="seller")
-    pay.since_check_ms = 99_999
-    app.step(16)                       # → success screen
-    snap("9-success", 1200)
+    pay.provider.check = lambda start: PaymentCheck(PaymentStatus.APPROVED, ref="SIM")
+    for _ in range(200):
+        app.step(50)
+        if app.current is not pay:
+            break
+    snap("9-success", 1000)
 
     # 10-13 — hand-over: unlocked, door open (sensor), last seconds, thanks
-    app.step(2100)
+    app.step(2300)
     snap("10-door-wait", 16)
     app.door.set_sim(True)
     app.step(16)

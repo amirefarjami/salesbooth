@@ -518,7 +518,7 @@ class Theme:
         inner = rect.inflate(-6, -6)
         fw = int(inner.w * max(0.0, min(1.0, frac)))
         if fw > 0:
-            # RTL: the bar drains toward the start (right) edge
-            pygame.draw.rect(surf, color, (inner.right - fw, inner.top, fw, inner.h),
+            # the bar empties from the right edge
+            pygame.draw.rect(surf, color, (inner.left, inner.top, fw, inner.h),
                              border_radius=inner.h // 2)
         pygame.draw.rect(surf, K["ink"], rect, W_SM + 1, border_radius=rect.h // 2)

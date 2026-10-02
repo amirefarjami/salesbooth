@@ -46,6 +46,7 @@ class SoundEngine:
             "error": (self._sfx_error, 0.35),
             "boot": (self._sfx_boot, 0.4),
             "alarm": (self._sfx_alarm, 0.3),
+            "fanfare": (self._sfx_fanfare, 2.1),
         }
         for name, (gen, dur) in synth.items():
             try:
@@ -100,6 +101,37 @@ class SoundEngine:
         f = 880 if t < 0.12 else 660
         sq = 1.0 if math.sin(2 * math.pi * f * t) >= 0 else -1.0
         return 0.35 * sq * (1.0 - p) ** 0.5
+
+    # «you won» fanfare for a successful payment: square-wave lead, triangle
+    # bass, a noise snare on the beats, a held major chord at the end
+    _FANFARE = [  # (start_s, length_s, lead_hz, bass_hz)
+        (0.00, 0.11, 523.25, 130.81), (0.12, 0.11, 659.25, 130.81),
+        (0.24, 0.11, 783.99, 196.00), (0.36, 0.22, 1046.5, 196.00),
+        (0.60, 0.11, 783.99, 174.61), (0.72, 0.30, 1046.5, 174.61),
+        (1.05, 0.11, 987.77, 196.00), (1.17, 0.11, 1046.5, 196.00),
+        (1.29, 0.80, 1318.5, 130.81),
+    ]
+
+    def _sfx_fanfare(self, t, p):
+        out = 0.0
+        for start, length, lead, bass in self._FANFARE:
+            lt = t - start
+            if 0 <= lt < length + 0.05:
+                env = min(1.0, lt / 0.008) * (1.0 if lt < length else max(0.0, 1 - (lt - length) / 0.05))
+                if length > 0.5:                      # last note: slow fade + chord
+                    env *= max(0.0, 1.0 - lt / (length + 0.05)) ** 0.6
+                    for mult in (1.25, 1.5):          # major third + fifth
+                        out += 0.10 * env * (1 if math.sin(2 * math.pi * lead * mult * lt) >= 0 else -1)
+                sq = 1 if math.sin(2 * math.pi * lead * lt) >= 0 else -1
+                vib = math.sin(2 * math.pi * lead * 2 * lt) * 0.25     # brighter lead
+                out += 0.22 * env * (sq + vib)
+                tri = 2 / math.pi * math.asin(math.sin(2 * math.pi * bass * lt))
+                out += 0.30 * env * tri
+        beat = t % 0.24                                   # snare on every beat
+        if t < 1.3 and beat < 0.05:
+            noise = ((int(t * 22050) * 1103515245 + 12345) >> 8 & 0xFF) / 127.5 - 1
+            out += 0.18 * noise * (1 - beat / 0.05)
+        return max(-1.0, min(1.0, out))
 
     # --- API ---
 

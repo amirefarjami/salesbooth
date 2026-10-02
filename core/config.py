@@ -72,6 +72,8 @@ class Config:
     zarinpal_merchant_id: str = ""
     zarinpal_sandbox: bool = True
     payment_methods: list = field(default_factory=lambda: ["qr", "card"])
+    pos_driver: str = "sim"           # card reader link: sim | none (PSP driver: TASKS #24)
+    pos_sim_approve_s: float = 5.0    # simulator: «swipe» after N s (0 = never)
     payment_poll_seconds: float = 3.0
     payment_timeout_s: int = 180      # give up waiting after this
 

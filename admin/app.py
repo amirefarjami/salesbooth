@@ -156,10 +156,7 @@ def orders_list(request: Request, booth: Booth = Depends(require_login)):
 @app.post("/admin/orders/{oid}/approve")
 def order_approve(oid: int, booth: Booth = Depends(require_login)):
     try:
-        owi = booth.orders.get(oid)
-        # keep the buyer's method (card = POS slip checked by the operator)
-        provider = owi.order.provider if owi and owi.order.provider == "card" else "manual"
-        booth.orders.mark_paid(oid, provider=provider, provider_ref="seller")
+        booth.orders.mark_paid(oid, provider="manual", provider_ref="seller")
     except Exception:
         pass
     return RedirectResponse(url="/admin", status_code=303)
@@ -201,7 +198,7 @@ def reports_csv(days: int = 30, booth: Booth = Depends(require_login)):
 PREVIEW_STEPS = [
     {"src": "/admin/preview-img/1-attract.png", "alt": "1-attract",
      "title": "حالت جذب مشتری",
-     "desc": "لوگو + «ابزار سرگرمی دستی»، راهنما، دکمه‌ی قرمز چشمک می‌زند"},
+     "desc": "فقط دکمه‌ی قرمز وارد منو می‌شود؛ لامپش چشمک می‌زند"},
     {"src": "/admin/preview-img/1b-attract-poster-1.png", "alt": "1b-attract-poster-1",
      "title": "اسلاید پوستر ۱",
      "desc": "صفحه‌ی برند و پوسترها جابه‌جا می‌شوند"},
@@ -222,7 +219,7 @@ PREVIEW_STEPS = [
      "desc": "دکمه‌ی ۱ = کیوآر، دکمه‌ی ۲ = کارتخوان، بعد قرمز"},
     {"src": "/admin/preview-img/6-pay-card.png", "alt": "6-pay-card",
      "title": "پرداخت با کارتخوان",
-     "desc": "اپراتور رسید را می‌بیند و از پنل تأیید می‌کند"},
+     "desc": "مبلغ به کارتخوان می‌رود؛ خریدار فقط کارت می‌کشد، تأیید خودکار"},
     {"src": "/admin/preview-img/7-pay-qr.png", "alt": "7-pay-qr",
      "title": "پرداخت با کیوآر",
      "desc": "زرین‌پال؛ باجه در پس‌زمینه استعلام می‌گیرد"},
@@ -231,10 +228,10 @@ PREVIEW_STEPS = [
      "desc": "موجودی برمی‌گردد؛ قرمز = دوباره"},
     {"src": "/admin/preview-img/9-success.png", "alt": "9-success",
      "title": "پرداخت موفق",
-     "desc": "انیمیشن موفقیت، بعد قفل ویترین آزاد می‌شود"},
+     "desc": "انیمیشن، کاغذرنگی و موزیک، بعد قفل ویترین آزاد می‌شود"},
     {"src": "/admin/preview-img/10-door-wait.png", "alt": "10-door-wait",
      "title": "تحویل",
-     "desc": "اقلام و کد سفارش برای اپراتور؛ منتظر باز شدن در"},
+     "desc": "«در ویترین رو باز کن و خریدت رو بردار»؛ منتظر باز شدن در"},
     {"src": "/admin/preview-img/11-door-open.png", "alt": "11-door-open",
      "title": "در باز شد",
      "desc": "سنسور در، شمارش معکوس را شروع می‌کند"},
