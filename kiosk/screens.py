@@ -49,8 +49,8 @@ class Screen:
         return "off"
 
     def lights_mode(self) -> str:
-        """Booth lighting (two MOSFETs): 'normal' | 'warn'."""
-        return "normal"
+        """Booth light scene (hardware/lights.py)."""
+        return "shop"
 
     def handle(self, action: str) -> None:  # pragma: no cover
         pass
@@ -106,6 +106,9 @@ class AttractScreen(Screen):
     def red_light(self) -> str:
         return "blink"            # «press the red button» is the call to action
 
+    def lights_mode(self) -> str:
+        return "attract"          # breathing + the «insert coin» call
+
     def tick(self, dt_ms: int) -> None:
         self.t_ms += dt_ms
         self.slide_ms += dt_ms
@@ -121,6 +124,7 @@ class AttractScreen(Screen):
     def handle(self, action: str) -> None:
         if action == "confirm":               # only the red button starts
             self.app.sounds.play("select")
+            self.app.lights.trigger("poweron")
             self.app.go("grid")
 
     def draw(self, surf: pygame.Surface) -> None:
@@ -291,6 +295,7 @@ class GridScreen(Screen):
             return
         self.app.cart_add(card.product.id)
         self.app.sounds.play("coin")
+        self.app.lights.trigger("blip")
         self.pops.append([card.rect.centerx, card.rect.top + 40, 0, "+۱"])
 
     def tick(self, dt_ms: int) -> None:

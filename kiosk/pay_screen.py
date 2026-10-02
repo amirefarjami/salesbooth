@@ -101,6 +101,7 @@ class PayScreen(Screen):
         self.done = True
         self.app.sounds.play("error")
         self.app.led.error()
+        self.app.lights.trigger("fail")
         self._shutdown_pool()
 
     def _shutdown_pool(self) -> None:
@@ -167,6 +168,9 @@ class PayScreen(Screen):
 
     def red_light(self) -> str:
         return "blink" if self.status == PaymentStatus.DECLINED else "off"
+
+    def lights_mode(self) -> str:
+        return "paywait" if self.status == PaymentStatus.PENDING else "shop"
 
     def handle(self, action: str) -> None:
         if self.status == PaymentStatus.DECLINED:
@@ -312,6 +316,8 @@ class SuccessScreen(Screen):
     led_mode = "success"
     DURATION_MS = 3200
 
+    def lights_mode(self) -> str:
+        return "celebrate"        # pulses with the fanfare
     def __init__(self, app, order_id: int, code: str) -> None:
         super().__init__(app)
         self.order_id = order_id
@@ -407,7 +413,7 @@ class DoorScreen(Screen):
 
     def lights_mode(self) -> str:
         """MOSFET 1 dims the booth, MOSFET 2 adds the red lights."""
-        return "warn" if self.warning else "normal"
+        return "warn" if self.warning else "door"
 
     def __init__(self, app, order_id: int, code: str) -> None:
         super().__init__(app)

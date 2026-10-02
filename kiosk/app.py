@@ -193,10 +193,11 @@ class KioskApp:
                 self.go("attract")
         self.current.tick(dt_ms)
         self.led.tick()
-        self.red.set(self.current.red_light())
-        self.red.tick()
         self.lights.set(self.current.lights_mode())
         self.lights.tick(dt_ms)
+        # the red button lamp joins the attract «insert coin» call
+        self.red.set("fast" if self.lights.calling else self.current.red_light())
+        self.red.tick()
         self.current.draw(self.screen)
         if self.theme.scanlines is not None and not self.headless:
             self.screen.blit(self.theme.scanlines, (0, 0))
