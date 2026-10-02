@@ -27,7 +27,8 @@ admin_pin = "1390"
 hostname = "chiz"
 currency = "تومان"
 
-payment_provider = "manual"   # manual | free | zarinpal
+payment_methods = ["qr", "card"]   # what the buyer can pick (button 1 / 2)
+payment_provider = "manual"   # "free" = every method auto-approves (testing)
 zarinpal_merchant_id = ""
 zarinpal_sandbox = true
 payment_poll_seconds = 3.0
@@ -35,16 +36,27 @@ payment_timeout_s = 180
 
 order_ttl_minutes = 30
 
-# showcase door (solenoid via relay): opens after payment, then re-locks
+# showcase door: solenoid lock via relay + reed-switch door sensor.
+# After payment the lock is released for the operator; the sensor starts
+# the countdown when the door opens; closing the door ends the hand-over.
 lock_enabled = true
 lock_gpio = 17
 lock_active_high = true
-door_open_s = 20      # 15-25 s per the design brief
+door_open_s = 20      # countdown once the door is open (15-25 s)
 door_warn_s = 5       # last seconds: lights dim, red light + alarm
+door_wait_s = 60      # unlocked but never opened → lock again
+
+door_sensor_enabled = true
+door_sensor_gpio = 27
+door_open_when_high = true   # reed closed (door shut) pulls the pin low
+
+# lamp inside the red confirm button (the only lit button)
+red_light_enabled = true
+red_light_gpio = 22
 
 # USB encoder keymap: key names ("1", "return", "f5") or raw key codes.
-# slot1..slot6 = the three buttons each side of the screen (RTL order:
-# 1 right-top, 2 left-top, 3 right-mid, 4 left-mid, 5 right-bottom, 6 left-bottom)
+# 8 buttons: slot1..slot6 beside the cards — 1, 3, 5 on the LEFT of the
+# screen (top to bottom), 2, 4, 6 on the RIGHT — plus red confirm and cancel.
 [booth.keymap]
 slot1 = "1"
 slot2 = "2"
@@ -52,9 +64,6 @@ slot3 = "3"
 slot4 = "4"
 slot5 = "5"
 slot6 = "6"
-confirm = "return"   # big red button
-cancel = "escape"    # «انصراف» under the screen
-up = "up"            # optional page buttons / old joystick
-down = "down"
-left = "left"
-right = "right"
+confirm = "return"   # big red button (lit)
+cancel = "escape"    # «انصراف»
+door_sim = "d"       # laptop only: open/close the showcase door

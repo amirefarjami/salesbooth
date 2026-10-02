@@ -12,12 +12,14 @@ from core.booth import Booth  # noqa: E402
 from core.config import load_config  # noqa: E402
 from core.fonts import FontPack  # noqa: E402
 from core.orders import OrderError  # noqa: E402
-from core.payment import provider_from_config  # noqa: E402
+from core.payment import provider_for_method  # noqa: E402
+from hardware.button_light import ButtonLight  # noqa: E402
+from hardware.door import DoorSensor  # noqa: E402
 from hardware.input import KeyboardInput  # noqa: E402
 from hardware.led import LEDStrip  # noqa: E402
 from hardware.lock import DoorLock  # noqa: E402
-from kiosk.pay_screen import DoorScreen, PayScreen  # noqa: E402
-from kiosk.screens import AttractScreen, ConfirmScreen, GridScreen  # noqa: E402
+from kiosk.pay_screen import DoorScreen, PayScreen, SuccessScreen  # noqa: E402
+from kiosk.screens import AttractScreen, CartScreen, GridScreen, MethodScreen  # noqa: E402
 from kiosk.sound import SoundEngine  # noqa: E402
 from kiosk.theme import K, Theme, plate  # noqa: E402
 
@@ -29,7 +31,7 @@ class KioskApp:
         self.booth = Booth.open(self.cfg)
         # orders left pending by a crash / power cut still hold stock
         self.booth.orders.expire_stale(self.cfg.order_ttl_minutes)
-        self.provider = provider_from_config(self.booth)
+        self._providers: dict = {}
 
         if not headless:
             flags = pygame.FULLSCREEN | pygame.SCALED if self.cfg.fullscreen else 0
@@ -52,6 +54,12 @@ class KioskApp:
         self.led = LEDStrip(self.cfg)
         self.lock = DoorLock(self.cfg)
         self.lock.lock()
+        self.door = DoorSensor(self.cfg)
+        self.red = ButtonLight(self.cfg)
+
+        # the cart: {product_id: qty} + the order things were added in
+        self.cart: dict[int, int] = {}
+        self.cart_log: list[int] = []
 
         self.input = KeyboardInput(self.cfg)
         self.idle_ms = 0
@@ -79,24 +87,82 @@ class KioskApp:
         if name == "grid":
             screen.reload_products()
         elif name == "attract":
+            self.cart_clear()
             self._screens["grid"].reset()
             self.booth.orders.expire_stale(self.cfg.order_ttl_minutes)
         self._show(screen, name)
         return screen
 
-    def open_confirm(self, product) -> None:
-        self._show(ConfirmScreen(self, product), "confirm")
+    # -- cart -----------------------------------------------------------
 
-    def create_order(self, product, qty: int) -> bool:
-        """Reserve stock and move to payment. False when it can't be sold."""
+    def cart_add(self, product_id: int) -> None:
+        self.cart[product_id] = self.cart.get(product_id, 0) + 1
+        self.cart_log.append(product_id)
+
+    def cart_remove_last(self) -> int | None:
+        if not self.cart_log:
+            return None
+        pid = self.cart_log.pop()
+        self.cart[pid] -= 1
+        if self.cart[pid] <= 0:
+            del self.cart[pid]
+        return pid
+
+    def cart_clear(self) -> None:
+        self.cart.clear()
+        self.cart_log.clear()
+
+    def cart_lines(self) -> list:
+        """[(Product, qty)] in the order products were first added."""
+        seen, out = set(), []
+        for pid in self.cart_log:
+            if pid in seen or pid not in self.cart:
+                continue
+            seen.add(pid)
+            p = self.booth.products.get(pid)
+            if p is not None:
+                out.append((p, self.cart[pid]))
+        return out
+
+    def cart_count(self) -> int:
+        return sum(self.cart.values())
+
+    def cart_total(self) -> int:
+        return sum(p.price_toman * q for p, q in self.cart_lines())
+
+    # -- checkout ---------------------------------------------------------
+
+    def open_cart(self) -> None:
+        if not self.cart:
+            self.go("grid")
+            return
+        self._show(CartScreen(self), "cart")
+
+    def open_methods(self) -> None:
+        if not self.cart:
+            self.go("grid")
+            return
+        self._show(MethodScreen(self), "method")
+
+    def provider_for(self, method: str):
+        if method not in self._providers:
+            self._providers[method] = provider_for_method(self.booth, method)
+        return self._providers[method]
+
+    def create_order(self, method: str) -> bool:
+        """Reserve the whole cart and start paying. False if it can't be sold."""
+        provider = self.provider_for(method)
         try:
-            owi = self.booth.orders.create(product.id, qty=qty,
-                                           provider=self.provider.name)
+            owi = self.booth.orders.create_cart(self.cart, provider=provider.name)
         except OrderError:
             return False
         self.pending_total = owi.order.total_toman
-        self._show(PayScreen(self, owi.order.id), "pay")
+        self._show(PayScreen(self, owi.order.id, provider, method), "pay")
         return True
+
+    def open_success(self, order_id: int, code: str) -> None:
+        self.cart_clear()                      # paid: the cart is now an order
+        self._show(SuccessScreen(self, order_id, code), "success")
 
     def open_door(self, order_id: int, code: str) -> None:
         self._show(DoorScreen(self, order_id, code), "door")
@@ -113,8 +179,11 @@ class KioskApp:
     def step(self, dt_ms: int, actions=()) -> None:
         """One frame: input → idle timeout → tick → LEDs → draw."""
         for act in actions:
-            self.idle_ms = 0
             value = act.value if hasattr(act, "value") else str(act)
+            if value == "door_sim":            # laptop: the "d" key is the door
+                self.door.toggle_sim()
+                continue
+            self.idle_ms = 0
             self.current.handle(value)
         if getattr(self.current, "idle_timeout", False):
             self.idle_ms += dt_ms
@@ -122,6 +191,8 @@ class KioskApp:
                 self.go("attract")
         self.current.tick(dt_ms)
         self.led.tick()
+        self.red.set(self.current.red_light())
+        self.red.tick()
         self.current.draw(self.screen)
         if self.theme.scanlines is not None and not self.headless:
             self.screen.blit(self.theme.scanlines, (0, 0))
@@ -141,6 +212,8 @@ class KioskApp:
     def shutdown(self) -> None:
         # never leave the showcase unlocked or a reservation dangling
         self.lock.cleanup()
+        self.door.cleanup()
+        self.red.cleanup()
         if isinstance(self.current, PayScreen) and not self.current.done:
             try:
                 self.booth.orders.cancel(self.current.order_id, restock=True)

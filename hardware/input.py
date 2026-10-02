@@ -1,23 +1,22 @@
 """CHIZ Booth — input layer.
 
-Booth panel (from the hand sketch): the screen sits in the middle with
-three arcade buttons on each side, one per product slot, plus the big
-red CONFIRM button and a CANCEL («انصراف») button under the
-screen. Every button goes through a zero-delay USB encoder that presents
-itself as a keyboard, so the laptop simulator uses the same mapping.
+Booth panel: the screen in the middle, three product buttons on each side
+(one per card), the big red CONFIRM button (the only one with a light) and
+CANCEL («انصراف»). Eight buttons in all, through a zero-delay USB encoder
+that presents itself as a keyboard, so the laptop simulator is identical.
 
     Action   Default key   Physical button
-    SLOT1    1             right column, top     (RTL: first product)
-    SLOT2    2             left column,  top
-    SLOT3    3             right column, middle
-    SLOT4    4             left column,  middle
-    SLOT5    5             right column, bottom
-    SLOT6    6             left column,  bottom
-    CONFIRM  return        big red button
-    CANCEL   escape        «انصراف» under the screen
-    UP/DOWN  up/down       optional page buttons (and the old joystick)
-    LEFT/RIGHT left/right  optional (old 5-button joystick layout)
+    SLOT1    1             left column,  top
+    SLOT2    2             right column, top
+    SLOT3    3             left column,  middle
+    SLOT4    4             right column, middle
+    SLOT5    5             left column,  bottom
+    SLOT6    6             right column, bottom
+    CONFIRM  return        big red button (lit)
+    CANCEL   escape        «انصراف»
+    DOOR_SIM d             laptop only: open/close the showcase door
 
+UP/DOWN/LEFT/RIGHT stay mappable for old joystick panels and tests.
 Keymap values in booth.toml may be key names ("1", "return", "f5") or
 raw pygame key codes (ints).
 """
@@ -41,6 +40,7 @@ class Action(Enum):
     SLOT4 = "slot4"
     SLOT5 = "slot5"
     SLOT6 = "slot6"
+    DOOR_SIM = "door_sim"
 
 
 SLOT_ACTIONS = (Action.SLOT1, Action.SLOT2, Action.SLOT3,

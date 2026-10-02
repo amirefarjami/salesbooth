@@ -156,7 +156,10 @@ def orders_list(request: Request, booth: Booth = Depends(require_login)):
 @app.post("/admin/orders/{oid}/approve")
 def order_approve(oid: int, booth: Booth = Depends(require_login)):
     try:
-        booth.orders.mark_paid(oid, provider="manual", provider_ref="seller")
+        owi = booth.orders.get(oid)
+        # keep the buyer's method (card = POS slip checked by the operator)
+        provider = owi.order.provider if owi and owi.order.provider == "card" else "manual"
+        booth.orders.mark_paid(oid, provider=provider, provider_ref="seller")
     except Exception:
         pass
     return RedirectResponse(url="/admin", status_code=303)
@@ -198,35 +201,49 @@ def reports_csv(days: int = 30, booth: Booth = Depends(require_login)):
 PREVIEW_STEPS = [
     {"src": "/admin/preview-img/1-attract.png", "alt": "1-attract",
      "title": "حالت جذب مشتری",
-     "desc": "لوگو + «ابزار سرگرمی دستی»، راهنمای سه‌مرحله‌ای، بلیت «دکمه‌ی قرمز رو بزن»"},
-    {"src": "/admin/preview-img/1b-attract-poster-1.png", "alt": "poster 1",
-     "title": "اسلاید پوستر ۱", "desc": "هر چند ثانیه بین صفحه‌ی برند و پوسترها جابه‌جا می‌شود"},
-    {"src": "/admin/preview-img/1c-attract-poster-2.png", "alt": "poster 2",
-     "title": "اسلاید پوستر ۲", "desc": "دعوت به دکمه‌ی قرمز روی پوستر هم می‌ماند"},
+     "desc": "لوگو + «ابزار سرگرمی دستی»، راهنما، دکمه‌ی قرمز چشمک می‌زند"},
+    {"src": "/admin/preview-img/1b-attract-poster-1.png", "alt": "1b-attract-poster-1",
+     "title": "اسلاید پوستر ۱",
+     "desc": "صفحه‌ی برند و پوسترها جابه‌جا می‌شوند"},
+    {"src": "/admin/preview-img/1c-attract-poster-2.png", "alt": "1c-attract-poster-2",
+     "title": "اسلاید پوستر ۲",
+     "desc": "هر دکمه‌ای خرید را شروع می‌کند"},
     {"src": "/admin/preview-img/2-grid.png", "alt": "2-grid",
      "title": "منوی محصولات",
-     "desc": "گرید ۲×۳، قیمت در انفجار زرد، برچسب «#۱» رو به دکمه‌ی کنار مانیتور"},
-    {"src": "/admin/preview-img/3-grid-selected.png", "alt": "3-grid-selected",
-     "title": "کالا انتخاب شد",
-     "desc": "قاب زعفرانی + بلیت خرید؛ قرمز = ادامه، انصراف = بی‌خیال"},
-    {"src": "/admin/preview-img/4-confirm.png", "alt": "4-confirm",
-     "title": "تأیید خرید",
-     "desc": "عکس، قیمت درشت، روش پرداخت"},
-    {"src": "/admin/preview-img/5-pay-qr.png", "alt": "5-pay-qr",
-     "title": "پرداخت با QR زرین‌پال",
-     "desc": "مشتری با گوشی اسکن می‌کند؛ باجه در پس‌زمینه استعلام می‌گیرد"},
-    {"src": "/admin/preview-img/6-pay-wait.png", "alt": "6-pay-wait",
-     "title": "پرداخت نزد فروشنده",
-     "desc": "کد سفارش درشت؛ فروشنده از پنل تأیید می‌کند"},
-    {"src": "/admin/preview-img/7-pay-failed.png", "alt": "7-pay-failed",
+     "desc": "۶ کالا، ۱/۳/۵ دکمه‌های چپ، ۲/۴/۶ دکمه‌های راست"},
+    {"src": "/admin/preview-img/3-grid-cart.png", "alt": "3-grid-cart",
+     "title": "افزودن به سبد",
+     "desc": "دکمه‌ی کنار کالا = +۱ به سبد و نمایش جزئیات؛ انصراف = برداشتن آخری"},
+    {"src": "/admin/preview-img/4-cart.png", "alt": "4-cart",
+     "title": "سبد خرید",
+     "desc": "فهرست و جمع کل؛ قرمز = انتخاب روش پرداخت"},
+    {"src": "/admin/preview-img/5-method.png", "alt": "5-method",
+     "title": "روش پرداخت",
+     "desc": "دکمه‌ی ۱ = کیوآر، دکمه‌ی ۲ = کارتخوان، بعد قرمز"},
+    {"src": "/admin/preview-img/6-pay-card.png", "alt": "6-pay-card",
+     "title": "پرداخت با کارتخوان",
+     "desc": "اپراتور رسید را می‌بیند و از پنل تأیید می‌کند"},
+    {"src": "/admin/preview-img/7-pay-qr.png", "alt": "7-pay-qr",
+     "title": "پرداخت با کیوآر",
+     "desc": "زرین‌پال؛ باجه در پس‌زمینه استعلام می‌گیرد"},
+    {"src": "/admin/preview-img/8-pay-failed.png", "alt": "8-pay-failed",
      "title": "پرداخت ناموفق",
-     "desc": "موجودی برمی‌گردد؛ قرمز = تلاش دوباره"},
-    {"src": "/admin/preview-img/8-door-open.png", "alt": "8-door-open",
-     "title": "در ویترین باز شد",
-     "desc": "قفل باز، شمارش معکوس، LED گرم"},
-    {"src": "/admin/preview-img/9-door-closing.png", "alt": "9-door-closing",
+     "desc": "موجودی برمی‌گردد؛ قرمز = دوباره"},
+    {"src": "/admin/preview-img/9-success.png", "alt": "9-success",
+     "title": "پرداخت موفق",
+     "desc": "انیمیشن موفقیت، بعد قفل ویترین آزاد می‌شود"},
+    {"src": "/admin/preview-img/10-door-wait.png", "alt": "10-door-wait",
+     "title": "تحویل",
+     "desc": "اقلام و کد سفارش برای اپراتور؛ منتظر باز شدن در"},
+    {"src": "/admin/preview-img/11-door-open.png", "alt": "11-door-open",
+     "title": "در باز شد",
+     "desc": "سنسور در، شمارش معکوس را شروع می‌کند"},
+    {"src": "/admin/preview-img/12-door-closing.png", "alt": "12-door-closing",
      "title": "ثانیه‌های آخر",
-     "desc": "نور قرمز + آلارم، بعد قفل دوباره بسته می‌شود"},
+     "desc": "نور قرمز و آلارم تا بسته شدن در"},
+    {"src": "/admin/preview-img/13-door-done.png", "alt": "13-door-done",
+     "title": "پایان",
+     "desc": "در بسته شد، قفل گرفت، سفارش تحویل‌شده ثبت شد"},
 ]
 
 

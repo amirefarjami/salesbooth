@@ -19,10 +19,10 @@ def price_fa(amount: int) -> str:
 class ProductCard:
     """One product slot on the 2×3 grid.
 
-    Layout (from the hand sketch): photo on paper, the name under an ink
-    hairline, a price sticker on a tab poking out of the top corner, a
-    turquoise numbered dot on the OUTER edge pointing at the physical slot
-    button beside the screen, and a red burst when stock is low.
+    Layout (from the hand sketch): photo on paper, the name under it, the
+    price sticker on the top tab, a red burst when few are left and a
+    yellow «×n» badge for how many are already in the cart. Each card sits
+    next to its own physical button, so it carries no number.
     """
 
     def __init__(self, product: Product, rect: pygame.Rect, theme,
@@ -35,10 +35,16 @@ class ProductCard:
         self.image = image
         self.selected = False
         self.flash = 0.0          # 0..1 press feedback (sinks the card)
+        self.in_cart = 0          # how many of this product are in the cart
 
     @property
     def sold_out(self) -> bool:
         return self.product.stock <= 0
+
+    @property
+    def left(self) -> int:
+        """Still available after what is already in the cart."""
+        return max(0, self.product.stock - self.in_cart)
 
     def draw(self, surf: pygame.Surface) -> None:
         t = self.theme
@@ -73,26 +79,31 @@ class ProductCard:
                           K["muted"] if self.sold_out else K["ink"], "display")
         surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 3)))
 
-        # price: comic burst on the top corner (start = right edge) ---
+        # price: sticker on the top tab (right corner) -----------------
         if self.sold_out:
             t.sticker(surf, "تمام شد", {"topright": (r.right - 8, r.top - 12)},
                       fill=K["paper"], color=K["danger"], border=K["danger"], size="xs")
         else:
-            t.price_burst(surf, (r.right - 44, r.top + 2), price_fa(self.product.price_toman),
-                          104, 54, "sm", seed=self.slot)
+            # plain yellow sticker on the top tab (the burst was too busy
+            # six times over; it stays only for the cart total)
+            t.sticker(surf, price_fa(self.product.price_toman),
+                      {"topright": (r.right - 8, r.top - 12)}, fill=K["hi"], size="sm")
 
-        # low-stock burst («فقط ۲ تا») ---------------------------------
-        if 0 < self.product.stock <= 2:
-            c = (r.left + 30, r.top + 28)
+        # low-stock burst («۲ تا») ------------------------------------
+        if not self.sold_out and self.left <= 2:
+            c = (r.left + 30, r.top + 26)
             burst(surf, c, 25, K["danger"])
-            lab = t.text(f"{fa_digits(self.product.stock)} تا", "xs", K["danger_ink"])
+            lab = t.text("تموم" if self.left == 0 else f"{fa_digits(self.left)} تا",
+                         "xs", K["danger_ink"])
             surf.blit(lab, lab.get_rect(center=(c[0], c[1] + 1)))
 
-        # slot tag «#۱» (the hang-tag numbering) on the outer edge,
-        # pointing at its physical button
-        mx = r.right if self.side == "right" else r.left
-        my = r.centery - 6
-        slot_tag(surf, t, (mx, my), self.slot, muted=self.sold_out)
+        # in-cart badge («×۲») on the photo's outer bottom corner
+        if self.in_cart:
+            anchor = ({"bottomright": (img_rect.right + 2, img_rect.bottom + 6)}
+                      if self.side == "left" else
+                      {"bottomleft": (img_rect.left - 2, img_rect.bottom + 6)})
+            t.sticker(surf, f"×{fa_digits(self.in_cart)}", anchor,
+                      fill=K["hi"], size="sm", face="display")
 
 
 def slot_tag(surf, t, center, n: int, muted: bool = False) -> pygame.Rect:

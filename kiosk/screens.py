@@ -1,8 +1,14 @@
-"""CHIZ Booth — kiosk screens: attract, product grid, order confirmation.
+"""CHIZ Booth — kiosk screens: attract, product grid (cart), cart review,
+payment method.
 
-Panel layout (hand sketch): 2×3 product grid in the middle of a portrait
-480×800 screen, three slot buttons on each side of the screen (one per
-card), the big red button to confirm and «انصراف» under the screen.
+Panel: a 2×3 product grid on a portrait 480×800 screen with one button
+beside each card — 1, 3, 5 down the LEFT side, 2, 4, 6 down the RIGHT —
+plus the red confirm button (the only lit one) and «انصراف».
+
+Flow: product button → into the cart (and its details show) → red → cart
+review → red → pick QR (button 1) or card reader (button 2) → red → pay →
+success animation → showcase unlocked for the operator → door sensor
+starts the countdown.
 """
 from __future__ import annotations
 
@@ -14,16 +20,15 @@ from core.config import DATA_DIR
 from core.fa import fa_digits
 from core.models import Product
 from hardware.input import slot_index
-from kiosk.theme import K, OFF_SM, arrow, marker_dot, plate
-from kiosk.widgets import ProductCard, load_product_image, price_fa
+from kiosk.theme import K, OFF_SM, arrow, marker_dot, plate, selected_card
+from kiosk.widgets import ProductCard, load_product_image, price_fa, slot_tag
 
-PER_PAGE = 6
+SLOTS = 6
 COLS = 2
 
-PROVIDER_LABEL = {
-    "zarinpal": "پرداخت با کیوآر کد (گوشی)",
-    "manual": "پرداخت نزد فروشنده",
-    "free": "حالت آزمایشی (رایگان)",
+METHOD_INFO = {   # method: (title, subtitle)
+    "qr": ("کیوآر کد", "با دوربین گوشی"),
+    "card": ("کارتخوان", "کارت بانکی"),
 }
 
 
@@ -39,6 +44,10 @@ class Screen:
     def enter(self) -> None:
         self.app.led.set_mode(self.led_mode)
 
+    def red_light(self) -> str:
+        """Lamp in the red button: 'off' | 'on' | 'blink'."""
+        return "off"
+
     def handle(self, action: str) -> None:  # pragma: no cover
         pass
 
@@ -53,6 +62,20 @@ def _press(t_ms: int, period: int = 1400) -> float:
     """0..1 'button press' curve: a quick sink every `period` ms."""
     p = (t_ms % period) / period
     return max(0.0, 1.0 - abs(p - 0.08) / 0.08) if p < 0.16 else 0.0
+
+
+def slot_geometry(t, top: int = 84, card_h: int = 150, gap_y: int = 20,
+                  margin_x: int = 36, gap_x: int = 20):
+    """Card rect + side for slots 1..6: odd slots on the left column (next to
+    the left buttons), even slots on the right."""
+    card_w = (t.w - margin_x * 2 - gap_x) // COLS
+    out = []
+    for pos in range(SLOTS):
+        row, col = divmod(pos, COLS)
+        x = margin_x + col * (card_w + gap_x)
+        y = top + 12 + row * (card_h + gap_y)
+        out.append((pygame.Rect(x, y, card_w, card_h), "left" if col == 0 else "right"))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +99,9 @@ class AttractScreen(Screen):
         self.slide = 0
         self.slide_ms = 0
 
+    def red_light(self) -> str:
+        return "blink"            # «press the red button» is the call to action
+
     def tick(self, dt_ms: int) -> None:
         self.t_ms += dt_ms
         self.slide_ms += dt_ms
@@ -91,9 +117,8 @@ class AttractScreen(Screen):
     def handle(self, action: str) -> None:
         self.app.sounds.play("select")
         grid = self.app.go("grid")
-        slot = slot_index(action)
-        if slot is not None:
-            grid.handle(action)   # a slot button jumps straight to its card
+        if slot_index(action) is not None:
+            grid.handle(action)   # a product button already adds that product
 
     def draw(self, surf: pygame.Surface) -> None:
         name = self.SLIDES[self.slide][0]
@@ -124,9 +149,9 @@ class AttractScreen(Screen):
         plate(surf, card, K["paper"])
         y = t.kicker_rule(surf, "چطوری بخرم؟", cx, card.top + 10, 140)
         steps = [
-            ("دکمه‌ی کنار کالای دلخواهت رو بزن", K["alt"]),
-            ("دکمه‌ی قرمز رو بزن و پرداخت کن", K["danger"]),
-            ("در ویترین باز میشه؛ برش دار!", K["hi"]),
+            ("دکمه‌ی کنار هر کالا = بنداز تو سبد", K["alt"]),
+            ("دکمه‌ی قرمز = پرداخت با کیوآر یا کارت", K["danger"]),
+            ("اپراتور از ویترین بهت تحویل می‌ده", K["hi"]),
         ]
         for i, (label, col) in enumerate(steps):
             row_y = y + 14 + i * 44
@@ -175,143 +200,108 @@ class AttractScreen(Screen):
 
 
 # ---------------------------------------------------------------------------
-# Product grid — 2×3 per page, one physical button per card
+# Product grid — every product button drops one into the cart
 # ---------------------------------------------------------------------------
 
 class GridScreen(Screen):
-    TOP = 84
-    CARD_H = 170
-    GAP_Y = 22
-    MARGIN_X = 36
-    GAP_X = 20
-
     def __init__(self, app) -> None:
         super().__init__(app)
         self.products: list[Product] = []
-        self.page = 0
-        self.selected: int | None = None   # index into self.products
         self.cards: list[ProductCard] = []
         self.images: dict[tuple, pygame.Surface | None] = {}
         self.flash: dict[int, float] = {}
-        self.nudge_ms = 0                  # «pick something first» hint
+        self.pops: list[list] = []         # floating «+۱» [x, y, age_ms, text]
+        self.focus: int | None = None      # slot whose details are shown
+        self.toast = ""                    # short message over the action bar
+        self.toast_ms = 0
+        self.nudge_ms = 0
         self.t_ms = 0
         self.reload_products()
 
     # data / layout -----------------------------------------------------
 
-    @property
-    def pages(self) -> int:
-        return max(1, math.ceil(len(self.products) / PER_PAGE))
-
     def reload_products(self) -> None:
-        keep = None
-        if self.selected is not None and self.selected < len(self.products):
-            keep = self.products[self.selected].id
-        self.products = self.app.booth.products.list_active()
-        self.page = min(self.page, self.pages - 1)
-        self.selected = next((i for i, p in enumerate(self.products) if p.id == keep), None)
+        """First six active products (admin sort order) — one per button."""
+        self.products = self.app.booth.products.list_active()[:SLOTS]
         self.images.clear()
         self._layout()
 
     def reset(self) -> None:
-        self.page = 0
-        self.selected = None
+        self.focus = None
+        self.pops.clear()
+        self.toast = ""
         self.reload_products()
 
     def _layout(self) -> None:
         t = self.app.theme
-        card_w = (t.w - self.MARGIN_X * 2 - self.GAP_X) // COLS
         self.cards = []
-        start = self.page * PER_PAGE
-        for pos, p in enumerate(self.products[start:start + PER_PAGE]):
-            row, col = divmod(pos, COLS)
-            # RTL: the first card of each row is on the RIGHT
-            x = t.w - self.MARGIN_X - card_w - col * (card_w + self.GAP_X)
-            y = self.TOP + 12 + row * (self.CARD_H + self.GAP_Y)
-            side = "right" if col == 0 else "left"
-            card = ProductCard(p, pygame.Rect(x, y, card_w, self.CARD_H), t,
-                               slot=pos + 1, side=side)
+        for pos, (p, (rect, side)) in enumerate(zip(self.products, slot_geometry(t))):
+            card = ProductCard(p, rect, t, slot=pos + 1, side=side)
             key = (p.id, p.image_path)
             if key not in self.images:
                 self.images[key] = load_product_image(
-                    DATA_DIR, p.image_path, card_w - 24, self.CARD_H - 82)
+                    DATA_DIR, p.image_path, rect.w - 24, rect.h - 72)
             card.image = self.images[key]
             self.cards.append(card)
+        if self.focus is not None and self.focus >= len(self.cards):
+            self.focus = None
 
-    def _set_page(self, page: int) -> None:
-        page = max(0, min(self.pages - 1, page))
-        if page != self.page:
-            self.page = page
-            self._layout()
+    def _say(self, msg: str) -> None:
+        self.toast, self.toast_ms = msg, 1800
 
     # interaction -------------------------------------------------------
 
+    def red_light(self) -> str:
+        return "blink" if self.app.cart else "off"
+
     def handle(self, action: str) -> None:
-        n = len(self.products)
         slot = slot_index(action)
         if slot is not None:
             self._press_slot(slot)
         elif action == "confirm":
-            if self.selected is None:
+            if self.app.cart:
+                self.app.sounds.play("select")
+                self.app.open_cart()
+            else:
                 self.app.sounds.play("back")
                 self.nudge_ms = 1600
-            else:
-                self.app.sounds.play("select")
-                self.app.open_confirm(self.products[self.selected])
         elif action == "cancel":
-            self.app.sounds.play("back")
-            if self.selected is not None:
-                self.selected = None
+            if self.app.cart_log:
+                pid = self.app.cart_remove_last()
+                name = next((p.name for p in self.products if p.id == pid), "")
+                self._say(f"«{name}» از سبد برداشته شد")
+                self.app.sounds.play("back")
             else:
+                self.app.sounds.play("back")
                 self.app.go("attract")
-        elif n and action in ("up", "down", "left", "right"):
-            self._move(action)
 
     def _press_slot(self, slot: int) -> None:
         if slot >= len(self.cards):
             self.app.sounds.play("back")
             return
-        idx = self.page * PER_PAGE + slot
+        card = self.cards[slot]
+        self.focus = slot
         self.flash[slot] = 1.0
-        if self.products[idx].stock <= 0:
+        if card.left <= 0:
             self.app.sounds.play("error")
             self.app.led.error()
+            self._say("از این کالا بیشتر نداریم")
             return
-        if self.selected == idx:
-            # second press on the same button = go (handy with one hand)
-            self.app.sounds.play("select")
-            self.app.open_confirm(self.products[idx])
-            return
-        self.selected = idx
-        self.app.sounds.play("move")
-
-    def _move(self, action: str) -> None:
-        """Joystick / page buttons: walk the selection, crossing pages."""
-        n = len(self.products)
-        if self.selected is None:
-            self.selected = self.page * PER_PAGE
-        else:
-            i = self.selected
-            col = (i % PER_PAGE) % COLS
-            step = {"up": -COLS, "down": COLS}.get(action, 0)
-            if action == "right" and col == 1:
-                step = -1           # RTL: right goes back to column 0
-            elif action == "left" and col == 0:
-                step = 1
-            j = i + step
-            if step == 0 or not (0 <= j < n):
-                return
-            self.selected = j
-        self._set_page(self.selected // PER_PAGE)
-        self.app.sounds.play("move")
+        self.app.cart_add(card.product.id)
+        self.app.sounds.play("coin")
+        self.pops.append([card.rect.centerx, card.rect.top + 40, 0, "+۱"])
 
     def tick(self, dt_ms: int) -> None:
         self.t_ms += dt_ms
         self.nudge_ms = max(0, self.nudge_ms - dt_ms)
+        self.toast_ms = max(0, self.toast_ms - dt_ms)
         for k in list(self.flash):
-            self.flash[k] = max(0.0, self.flash[k] - dt_ms / 140)
+            self.flash[k] = max(0.0, self.flash[k] - dt_ms / 160)
             if self.flash[k] == 0.0:
                 del self.flash[k]
+        for pop in self.pops:
+            pop[2] += dt_ms
+        self.pops = [p for p in self.pops if p[2] < 700]
 
     # drawing -----------------------------------------------------------
 
@@ -327,11 +317,16 @@ class GridScreen(Screen):
             surf.blit(msg, msg.get_rect(center=(box.centerx, box.centery - 16)))
             sub = t.text("به‌زودی برمی‌گردیم!", "sm", K["muted"])
             surf.blit(sub, sub.get_rect(center=(box.centerx, box.centery + 30)))
-        start = self.page * PER_PAGE
         for pos, card in enumerate(self.cards):
-            card.selected = (start + pos == self.selected)
+            card.in_cart = self.app.cart.get(card.product.id, 0)
+            card.selected = pos == self.focus
             card.flash = self.flash.get(pos, 0.0)
             card.draw(surf)
+        for x, y, age, text in self.pops:   # «+۱» floats up and fades
+            k = age / 700
+            s = t.text(text, "lg", K["hi"], "display").copy()
+            s.set_alpha(int(255 * (1 - k)))
+            surf.blit(s, s.get_rect(center=(x, y - int(60 * k))))
 
         self._draw_action_bar(surf, t)
 
@@ -344,62 +339,67 @@ class GridScreen(Screen):
             right = r.left - 10
         t.kicker(surf, "باجه‌ی فروش", {"topright": (right, 30)},
                  color=K["alt_ink"], marker=K["hi"], size="sm")
-        if self.pages > 1:
-            t.sticker(surf, f"صفحه {fa_digits(self.page + 1)} از {fa_digits(self.pages)}",
-                      {"topleft": (28, 26)}, size="xs")
-        else:
-            t.kicker(surf, "قیمت‌ها به تومان", {"topleft": (28, 32)},
-                     color=K["alt_ink"], size="xs")
+        t.kicker(surf, "قیمت‌ها به تومان", {"topleft": (28, 32)},
+                 color=K["alt_ink"], size="xs")
 
     def _draw_action_bar(self, surf, t) -> None:
-        bar_top = self.TOP + 12 + 3 * (self.CARD_H + self.GAP_Y) + 4
-        ticket = pygame.Rect(36, bar_top, t.w - 72, 64)
-        if self.selected is not None:
-            p = self.products[self.selected]
-            t.go_ticket(surf, ticket, f"خرید {p.name}", "md",
-                        pressed=_press(self.t_ms, 1600))
-            info = f"{price_fa(p.price_toman)} تومان  •  قرمز: خرید"
+        top = slot_geometry(t)[-1][0].bottom + 14
+        # 1) details of the product last pressed (or the hint)
+        info = pygame.Rect(36, top, t.w - 72, 46)
+        if self.toast_ms:
+            plate(surf, info, K["hi"], shadow=OFF_SM)
+            s = t.fit_text(self.toast, info.w - 20, ("sm", "xs"))
+            surf.blit(s, s.get_rect(center=info.center))
+        elif self.focus is not None:
+            card = self.cards[self.focus]
+            p = card.product
+            plate(surf, info, K["paper"], shadow=OFF_SM)
+            name = t.fit_text(p.name, 180, ("sm", "xs"), K["ink"], "display")
+            surf.blit(name, name.get_rect(midright=(info.right - 14, info.centery)))
+            det = t.text(f"{price_fa(p.price_toman)} تومان  •  موجودی {fa_digits(card.left)}",
+                         "xs", K["muted"])
+            surf.blit(det, det.get_rect(midleft=(info.left + 12, info.centery)))
         else:
-            # the hint card: arrows point out to the side buttons
-            plate(surf, ticket, K["hi"] if self.nudge_ms else K["paper"])
-            lab = t.fit_text("دکمه‌ی کنار کالا رو بزن", ticket.w - 90, ("md", "sm"))
-            surf.blit(lab, lab.get_rect(center=ticket.center))
-            arrow(surf, (ticket.right - 14, ticket.centery), 14, "right")
-            arrow(surf, (ticket.left + 14, ticket.centery), 14, "left")
-            info = "بعد دکمه‌ی قرمز"
-        # footer: info on the start side, the cancel hint over the real button
+            plate(surf, info, K["hi"] if self.nudge_ms else K["paper"], shadow=OFF_SM)
+            s = t.fit_text("دکمه‌ی کنار هر کالا = بنداز تو سبد", info.w - 70, ("sm", "xs"))
+            surf.blit(s, s.get_rect(center=info.center))
+            arrow(surf, (info.left + 12, info.centery), 10, "left")
+            arrow(surf, (info.right - 12, info.centery), 10, "right")
+
+        # 2) the cart ticket — red takes you to checkout
+        ticket = pygame.Rect(36, info.bottom + 14, t.w - 72, 60)
+        count = self.app.cart_count()
+        if count:
+            t.go_ticket(surf, ticket, "سبد خرید و پرداخت", "md",
+                        pressed=_press(self.t_ms, 1600))
+            foot = f"{fa_digits(count)} کالا  •  {price_fa(self.app.cart_total())} تومان"
+        else:
+            t.go_ticket(surf, ticket, "سبد خرید خالیه", "md", disabled=True)
+            foot = "اول یه کالا انتخاب کن"
         foot_y = ticket.bottom + 20
-        t.kicker(surf, info, {"midright": (t.w - 36, foot_y)},
+        t.kicker(surf, foot, {"midright": (t.w - 36, foot_y)},
                  color=K["alt_ink"], size="xs", marker=K["danger"], round_marker=True)
-        cancel = pygame.Rect(36, foot_y - 15, 112, 30)
-        plate(surf, cancel, K["paper"], shadow=OFF_SM)
-        lab = t.text("انصراف" if self.selected is None else "بی‌خیال", "xs")
-        surf.blit(lab, lab.get_rect(midright=(cancel.right - 10, cancel.centery)))
-        arrow(surf, (cancel.left + 16, cancel.centery + 7), 8, "down")
+        hint = "انصراف: برداشتن آخری" if count else "انصراف: برگشت"
+        h = t.text(hint, "xs", K["alt_ink"], bold=False)
+        surf.blit(h, h.get_rect(midleft=(36, foot_y)))
 
 
 # ---------------------------------------------------------------------------
-# Confirm — product summary, price headline, red-button ticket
+# Cart review — what is in the cart, the total, red = choose payment
 # ---------------------------------------------------------------------------
 
-class ConfirmScreen(Screen):
-    def __init__(self, app, product: Product, qty: int = 1) -> None:
+class CartScreen(Screen):
+    def __init__(self, app) -> None:
         super().__init__(app)
-        self.product = product
-        self.qty = qty
-        self.total = product.price_toman * qty
-        self.image = load_product_image(DATA_DIR, product.image_path, 190, 190)
-        self.error = ""
         self.t_ms = 0
 
+    def red_light(self) -> str:
+        return "blink"
+
     def handle(self, action: str) -> None:
-        if action == "confirm" and self.error:
-            self.app.go("grid")
-        elif action == "confirm":
-            self.app.sounds.play("coin")
-            if not self.app.create_order(self.product, self.qty):
-                self.error = "این کالا همین الان تمام شد"
-                self.app.sounds.play("error")
+        if action == "confirm":
+            self.app.sounds.play("select")
+            self.app.open_methods()
         elif action == "cancel":
             self.app.sounds.play("back")
             self.app.go("grid")
@@ -413,46 +413,150 @@ class ConfirmScreen(Screen):
         box = pygame.Rect(24, 64, t.w - 48, 640)
         t.modal(surf, box)
         cx = box.centerx
-        t.title_box(surf, "تأیید خرید", {"midtop": (cx, box.top - 22)}, "md")
+        t.title_box(surf, "سبد خرید", {"midtop": (cx, box.top - 22)}, "md")
 
-        img_box = pygame.Rect(0, 0, 210, 210)
-        img_box.midtop = (cx, box.top + 44)
-        plate(surf, img_box, K["paper_2"], shadow=OFF_SM)
-        if self.image is not None:
-            surf.blit(self.image, self.image.get_rect(center=img_box.center))
-        else:
-            ph = t.logo(120, alpha=90)
-            if ph is not None:
-                surf.blit(ph, ph.get_rect(center=img_box.center))
-        pygame.draw.rect(surf, K["ink"], img_box, 3, border_radius=10)
+        y = box.top + 44
+        for line in self.app.cart_lines():
+            p, qty = line
+            row = pygame.Rect(box.left + 20, y, box.w - 40, 52)
+            pygame.draw.line(surf, K["line"], (row.left, row.bottom), (row.right, row.bottom), 2)
+            name = t.fit_text(p.name, 190, ("sm", "xs"), K["ink"], "display")
+            surf.blit(name, name.get_rect(midright=(row.right, row.centery)))
+            q = t.text(f"×{fa_digits(qty)}", "md", K["alt"], "display")
+            surf.blit(q, q.get_rect(center=(row.centerx - 30, row.centery + 2)))
+            lt = t.text(f"{price_fa(p.price_toman * qty)}", "sm")
+            surf.blit(lt, lt.get_rect(midleft=(row.left, row.centery)))
+            y += 56
 
-        y = img_box.bottom + 18
-        name = t.fit_text(self.product.name, box.w - 60, ("lg", "md", "sm"))
-        surf.blit(name, name.get_rect(midtop=(cx, y)))
-        y += name.get_height() + 4
-        y = t.kicker_rule(surf, f"{fa_digits(self.qty)} عدد", cx, y, 120, "xs")
-
-        # price headline in the brand's comic burst, «تومان» beside it
-        burst_r = t.price_burst(surf, (cx + 18, y + 44), price_fa(self.total), 230, 84, "xl")
+        total_y = max(y + 26, box.top + 330)
+        lab = t.text("جمع کل", "sm", K["muted"])
+        surf.blit(lab, lab.get_rect(midright=(box.right - 24, total_y + 40)))
+        burst_r = t.price_burst(surf, (cx - 20, total_y + 40),
+                                price_fa(self.app.cart_total()), 220, 82, "xl")
         cur = t.text("تومان", "sm", K["muted"])
         surf.blit(cur, cur.get_rect(midright=(burst_r.left - 2, burst_r.centery + 4)))
-        y += 98
 
-        method = PROVIDER_LABEL.get(self.app.provider.name, self.app.provider.name)
-        t.kicker(surf, method, {"midtop": (cx, y)}, size="xs", marker=K["alt"],
-                 round_marker=True)
-        y += 34
+        ticket = pygame.Rect(box.left + 24, box.bottom - 150, box.w - 48, 68)
+        t.go_ticket(surf, ticket, "انتخاب روش پرداخت", "md", pressed=_press(self.t_ms, 1600))
+        back = pygame.Rect(box.left + 24, ticket.bottom + 18, box.w - 48, 46)
+        t.button(surf, back, "انصراف: برگشت به محصولات", "paper", "md")
+
+
+# ---------------------------------------------------------------------------
+# Payment method — button 1 (left) = QR, button 2 (right) = card reader
+# ---------------------------------------------------------------------------
+
+class MethodScreen(Screen):
+    SLOT_OF = {"qr": 0, "card": 1}
+
+    def __init__(self, app) -> None:
+        super().__init__(app)
+        self.methods = [m for m in app.cfg.payment_methods if m in self.SLOT_OF] or ["card"]
+        self.choice: str | None = self.methods[0] if len(self.methods) == 1 else None
+        self.t_ms = 0
+        self.error = ""
+
+    def red_light(self) -> str:
+        return "blink" if self.choice else "off"
+
+    def handle(self, action: str) -> None:
+        slot = slot_index(action)
+        if slot is not None:
+            pick = next((m for m in self.methods if self.SLOT_OF[m] == slot), None)
+            if pick is None:
+                self.app.sounds.play("back")
+                return
+            self.choice = pick
+            self.error = ""
+            self.app.sounds.play("move")
+        elif action == "confirm":
+            if not self.choice:
+                self.app.sounds.play("back")
+                return
+            self.app.sounds.play("coin")
+            if not self.app.create_order(self.choice):
+                self.error = "یکی از کالاها همین الان تموم شد"
+                self.app.sounds.play("error")
+        elif action == "cancel":
+            self.app.sounds.play("back")
+            self.app.open_cart()
+
+    def tick(self, dt_ms: int) -> None:
+        self.t_ms += dt_ms
+
+    def draw(self, surf: pygame.Surface) -> None:
+        t = self.app.theme
+        t.stage(surf)
+        cx = t.w // 2
+        t.title_box(surf, "روش پرداخت", {"midtop": (cx, 22)}, "md")
+        geo = slot_geometry(t)
+        for m in ("qr", "card"):
+            rect, side = geo[self.SLOT_OF[m]]
+            rect = rect.inflate(0, 40).move(0, 30)
+            on = m in self.methods
+            if not on:
+                plate(surf, rect, K["paper_2"], shadow=0, dashed=True, border=K["muted"])
+            elif self.choice == m:
+                selected_card(surf, rect)
+            else:
+                plate(surf, rect, K["paper"])
+            icon_c = (rect.centerx, rect.top + 64)
+            (_qr_icon if m == "qr" else _card_icon)(surf, icon_c, K["ink"] if on else K["muted"])
+            title, sub = METHOD_INFO[m]
+            tt = t.text(title, "sm", K["ink"] if on else K["muted"], "display")
+            surf.blit(tt, tt.get_rect(midtop=(rect.centerx, rect.top + 112)))
+            st = t.text(sub if on else "فعلاً غیرفعال", "xs", K["muted"])
+            surf.blit(st, st.get_rect(midtop=(rect.centerx, rect.top + 150)))
+            x = rect.left if side == "left" else rect.right
+            slot_tag(surf, t, (x, rect.centery), self.SLOT_OF[m] + 1, muted=not on)
+
+        y = geo[0][0].bottom + 100
+        plate(surf, pygame.Rect(36, y, t.w - 72, 64), K["paper"], shadow=OFF_SM)
+        lab = t.text("مبلغ قابل پرداخت", "xs", K["muted"])
+        surf.blit(lab, lab.get_rect(midright=(t.w - 50, y + 32)))
+        amt = t.text(f"{price_fa(self.app.cart_total())} تومان", "lg", K["ink"], "display")
+        surf.blit(amt, amt.get_rect(midleft=(50, y + 34)))
 
         if self.error:
-            t.sticker(surf, self.error, {"midtop": (cx, y - 6)}, size="xs",
+            t.sticker(surf, self.error, {"midtop": (cx, y + 84)}, size="xs",
                       color=K["danger"], border=K["danger"])
-            y += 30
+        ticket = pygame.Rect(36, 612, t.w - 72, 64)
+        label = "پرداخت" if self.choice else "اول روش پرداخت رو بزن"
+        t.go_ticket(surf, ticket, label, "md", pressed=_press(self.t_ms, 1600),
+                    disabled=not self.choice)
+        h = t.text("دکمه‌ی ۱: کیوآر  •  دکمه‌ی ۲: کارتخوان  •  انصراف: برگشت",
+                   "xs", K["alt_ink"], bold=False)
+        surf.blit(h, h.get_rect(midtop=(cx, ticket.bottom + 20)))
 
-        ticket = pygame.Rect(box.left + 24, max(y, box.bottom - 150), box.w - 48, 68)
-        t.go_ticket(surf, ticket, "پرداخت", "lg", pressed=_press(self.t_ms, 1600),
-                    disabled=bool(self.error))
-        cancel = pygame.Rect(box.left + 24, ticket.bottom + 18, box.w - 48, 46)
-        t.button(surf, cancel, "انصراف", "paper", "md")
 
-        hint = t.text("قرمز: پرداخت   •   انصراف: برگشت", "xs", K["alt_ink"], bold=False)
-        surf.blit(hint, hint.get_rect(midtop=(cx, box.bottom + 22)))
+def _qr_icon(surf, center, color) -> None:
+    cx, cy = center
+    box = pygame.Rect(0, 0, 70, 70)
+    box.center = (cx, cy)
+    pygame.draw.rect(surf, (255, 255, 255), box, border_radius=6)
+    pygame.draw.rect(surf, color, box, 3, border_radius=6)
+    for dx, dy in ((-1, -1), (1, -1), (-1, 1)):
+        f = pygame.Rect(0, 0, 20, 20)
+        f.center = (cx + dx * 18, cy + dy * 18)
+        pygame.draw.rect(surf, color, f, 4)
+        pygame.draw.rect(surf, color, f.inflate(-12, -12))
+    for i, (dx, dy) in enumerate(((10, 10), (20, 14), (14, 22), (22, 24), (6, 22))):
+        pygame.draw.rect(surf, color, (cx + dx - 3, cy + dy - 3, 6, 6))
+
+
+def _card_icon(surf, center, color) -> None:
+    cx, cy = center
+    body = pygame.Rect(0, 0, 54, 76)
+    body.center = (cx, cy)
+    pygame.draw.rect(surf, K["paper_2"], body, border_radius=8)
+    pygame.draw.rect(surf, color, body, 3, border_radius=8)
+    screen = pygame.Rect(body.left + 9, body.top + 9, body.w - 18, 18)
+    pygame.draw.rect(surf, K["alt"], screen, border_radius=3)
+    for r in range(3):
+        for c in range(3):
+            pygame.draw.rect(surf, color, (body.left + 11 + c * 12, body.top + 34 + r * 11, 8, 7),
+                             border_radius=2)
+    card = pygame.Rect(0, 0, 44, 28)
+    card.midbottom = (cx + 26, body.top + 14)
+    pygame.draw.rect(surf, K["hi"], card, border_radius=4)
+    pygame.draw.rect(surf, color, card, 2, border_radius=4)

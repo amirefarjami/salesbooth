@@ -42,7 +42,7 @@ async function refresh(){
         <b class="price">${o.total.toLocaleString('fa-IR')} تومان</b></div>
       ${o.status==='pending'
         ? `<form method="post" action="/admin/orders/${o.id}/approve">
-             <button>✅ تأیید پرداخت (دستی)</button></form>`
+             <button>✅ ${o.provider==='card' ? 'رسید کارتخوان رو دیدم — تأیید' : 'تأیید پرداخت (دستی)'}</button></form>`
         : `<form method="post" action="/admin/orders/${o.id}/deliver">
              <button>📦 تحویل شد</button></form>`}
     </div>`).join('');

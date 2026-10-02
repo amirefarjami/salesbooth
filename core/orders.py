@@ -66,6 +66,45 @@ class OrderRepo:
             raise
         return self.get(order_id)  # type: ignore[arg-type]
 
+    def create_cart(self, items: dict[int, int],
+                    provider: str = "manual") -> OrderWithItems:
+        """One pending order for a whole cart {product_id: qty}, reserving
+        every line's stock atomically (all or nothing)."""
+        lines = [(int(pid), int(q)) for pid, q in items.items() if int(q) > 0]
+        if not lines:
+            raise OrderError("cart is empty")
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            rows = []
+            for pid, qty in lines:
+                row = self.conn.execute(
+                    "SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+                if row is None or not row["active"]:
+                    raise OrderError("product not found")
+                if row["stock"] < qty:
+                    raise OutOfStock(row["name"])
+                rows.append((row, qty))
+            total = sum(r["price_toman"] * q for r, q in rows)
+            code = self._next_code()
+            cur = self.conn.execute(
+                "INSERT INTO orders(code, status, total_toman, provider) "
+                "VALUES(?, 'pending', ?, ?)", (code, total, provider))
+            order_id = cur.lastrowid
+            for row, qty in rows:
+                self.conn.execute(
+                    "UPDATE products SET stock=stock-? WHERE id=?", (qty, row["id"]))
+                self.conn.execute(
+                    "INSERT INTO order_items(order_id, product_id, name, unit_price, qty) "
+                    "VALUES(?,?,?,?,?)",
+                    (order_id, row["id"], row["name"], row["price_toman"], qty))
+            self._log("order_created", order_id,
+                      ", ".join(f"{r['name']} x{q}" for r, q in rows))
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        return self.get(order_id)  # type: ignore[arg-type]
+
     def _next_code(self) -> str:
         """Short numeric pickup code unique among open orders."""
         for _ in range(50):

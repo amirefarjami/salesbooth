@@ -144,6 +144,8 @@ def render(booth, products: list) -> None:
     cfg.sound = False
     cfg.led_enabled = False
     cfg.lock_enabled = False
+    cfg.red_light_enabled = False
+    cfg.door_sensor_enabled = True
     app = KioskApp(cfg, headless=True)
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -159,56 +161,67 @@ def render(booth, products: list) -> None:
         snap(name)
     app.current.slide = 0
 
-    # 2 — grid, nothing picked yet
+    # 2 — grid, nothing in the cart
     app.go("grid")
     snap("2-grid")
 
-    # 3 — grid, slot 2 pressed (left column, top)
+    # 3 — two products in the cart (buttons 1, 1, 4); details of the last
+    app.step(16, ["slot1"])
+    app.step(16, ["slot1"])
+    app.step(16, ["slot4"])
+    snap("3-grid-cart", 900)
+
+    # 4 — cart review
+    app.step(16, ["confirm"])
+    snap("4-cart")
+
+    # 5 — payment method, card reader picked (button 2)
+    app.step(16, ["confirm"])
     app.step(16, ["slot2"])
-    snap("3-grid-selected", 400)
+    snap("5-method")
 
-    # 4 — confirm
-    app.open_confirm(products[1])
-    snap("4-confirm")
+    # 6 — paying on the card reader (operator confirms in the panel)
+    app.step(16, ["confirm"])
+    pay = app.current
+    snap("6-pay-card", 900)
 
-    # 5 — payment with QR (zarinpal)
-    p0 = products[0]
-    owi = booth.orders.create(p0.id, provider="zarinpal")
-    pay = PayScreen(app, owi.order.id)
-    pay.start = PaymentStart(ok=True, provider="zarinpal", order_id=owi.order.id,
-                             amount=owi.order.total_toman,
-                             qr_payload="https://sandbox.zarinpal.com/pg/StartPay/DEMO1234",
-                             authority="DEMO1234")
-    pay.qr = _qr_surface(pay.start.qr_payload, 236)
-    pay.t_ms = 40_000
-    app.current = pay
-    pay.draw(app.screen)
-    pygame.image.save(app.screen, str(OUT / "5-pay-qr.png"))
-    print("rendered 5-pay-qr")
+    # 7 — QR payment (zarinpal), rendered with a demo authority
+    owi = booth.orders.create(products[0].id, provider="zarinpal")
+    qr = PayScreen(app, owi.order.id, app.provider_for("card"), "qr")
+    qr.start = PaymentStart(ok=True, provider="zarinpal", order_id=owi.order.id,
+                            amount=owi.order.total_toman,
+                            qr_payload="https://sandbox.zarinpal.com/pg/StartPay/DEMO1234",
+                            authority="DEMO1234")
+    qr.qr = _qr_surface(qr.start.qr_payload, 236)
+    qr.t_ms = 40_000
+    qr.draw(app.screen)
+    pygame.image.save(app.screen, str(OUT / "7-pay-qr.png"))
+    print("rendered 7-pay-qr")
     booth.orders.cancel(owi.order.id)
 
-    # 6 — waiting for the seller (manual)
-    owi2 = booth.orders.create(p0.id, provider="manual")
-    app.pending_total = owi2.order.total_toman
-    pay2 = PayScreen(app, owi2.order.id)
-    app.current = pay2
-    snap("6-pay-wait", 900)
+    # 8 — declined
+    owi3 = booth.orders.create(products[0].id, provider="card")
+    failed = PayScreen(app, owi3.order.id, app.provider_for("card"), "card")
+    failed._fail("زمان پرداخت تمام شد")
+    app.current = failed
+    snap("8-pay-failed")
 
-    # 7 — declined
-    owi3 = booth.orders.create(p0.id, provider="manual")
-    pay3 = PayScreen(app, owi3.order.id)
-    pay3._fail("زمان پرداخت تمام شد")
-    app.current = pay3
-    snap("7-pay-failed")
+    # 9 — approved: success animation
+    app.current = pay
+    booth.orders.mark_paid(pay.order_id, provider="card", provider_ref="seller")
+    pay.since_check_ms = 99_999
+    app.step(16)                       # → success screen
+    snap("9-success", 1200)
 
-    # 8 — paid → showcase door open, countdown
-    booth.orders.mark_paid(owi2.order.id, provider="manual", provider_ref="seller")
-    door = DoorScreen(app, owi2.order.id, owi2.order.code)
-    app.current = door
-    snap("8-door-open", 6_000)
-
-    # 9 — last seconds: red + alarm
-    snap("9-door-closing", 11_000)
+    # 10-13 — hand-over: unlocked, door open (sensor), last seconds, thanks
+    app.step(2100)
+    snap("10-door-wait", 16)
+    app.door.set_sim(True)
+    app.step(16)
+    snap("11-door-open", 6000)
+    snap("12-door-closing", 11_000)
+    app.door.set_sim(False)
+    snap("13-door-done")
 
     app.shutdown()
 
