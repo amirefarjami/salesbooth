@@ -23,7 +23,8 @@ from core.payment import PaymentStatus
 
 PRODUCT_IMG_DIR = DATA_DIR / "img" / "products"
 SESSION_COOKIE = "chiz_admin"
-_MAX_IMG_BYTES = 5 * 1024 * 1024
+_MAX_IMG_BYTES = 20 * 1024 * 1024   # phone photos; re-encoded small on save
+_IMG_MAX_SIDE = 600                 # plenty for the 480×800 booth screen
 
 app = FastAPI(title="CHIZ Booth Admin", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -77,8 +78,12 @@ def login(request: Request, pin: str = Form(""), booth: Booth = Depends(get_boot
 
 
 @app.post("/admin/logout")
-def logout():
-    return RedirectResponse(url="/admin/login", status_code=303)
+def logout(request: Request):
+    # really end the session: forget the token and drop the cookie
+    _state["tokens"].discard(request.cookies.get(SESSION_COOKIE))
+    resp = RedirectResponse(url="/admin/login", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -94,8 +99,9 @@ def dashboard(request: Request, booth: Booth = Depends(require_login)):
 
 @app.get("/admin/products", response_class=HTMLResponse)
 def products_list(request: Request, booth: Booth = Depends(require_login)):
+    on_booth = {p.id: i + 1 for i, p in enumerate(booth.products.list_active()[:6])}
     return templates.TemplateResponse(request, "products.html", {
-        "products": booth.products.list_all(),
+        "products": booth.products.list_all(), "on_booth": on_booth,
     })
 
 
@@ -140,9 +146,16 @@ def stock_delta(pid: int, delta: int = Form(...), booth: Booth = Depends(require
 def products_delete(pid: int, booth: Booth = Depends(require_login)):
     p = booth.products.get(pid)
     if p:
-        if p.image_path:
-            _delete_image(p.image_path)
-        booth.products.delete(pid)
+        import sqlite3
+        try:
+            booth.products.delete(pid)
+        except sqlite3.IntegrityError:
+            # already sold: the order history needs it — hide it instead
+            booth.conn.rollback()
+            booth.products.update(pid, active=False, stock=0)
+        else:
+            if p.image_path:
+                _delete_image(p.image_path)
     return RedirectResponse(url="/admin/products", status_code=303)
 
 
@@ -190,8 +203,9 @@ def reports_csv(days: int = 30, booth: Booth = Depends(require_login)):
         writer.writerow([r["id"], r["code"], r["status"], r["total_toman"],
                          r["provider"], r["provider_ref"], r["created_at"],
                          r["paid_at"], r["items"]])
+    # BOM so Excel opens the Persian text as UTF-8 instead of garbage
     return PlainTextResponse(
-        buf.getvalue(), media_type="text/csv",
+        "\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=chiz-sales.csv"})
 
 
@@ -290,18 +304,29 @@ def api_open_orders(booth: Booth = Depends(require_login)):
 # ---------------------------------------------------------------- images
 
 def _save_image(upload: UploadFile) -> str | None:
+    """Any phone photo (JPEG/PNG/WebP, up to 20 MB) → upright, ≤600 px JPEG."""
     ct = (upload.content_type or "").lower()
     if not ct.startswith("image/"):
         return None
     data = upload.file.read(_MAX_IMG_BYTES + 1)
     if len(data) > _MAX_IMG_BYTES:
         return None
-    ext = ".png" if "png" in ct else ".jpg" if "jpeg" in ct else ".webp" if "webp" in ct else ""
-    if not ext:
-        return None
+    try:
+        from PIL import Image, ImageOps
+
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)          # phone photos come rotated
+        if img.mode in ("RGBA", "LA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+            img = bg
+        img = img.convert("RGB")
+        img.thumbnail((_IMG_MAX_SIDE, _IMG_MAX_SIDE))
+    except Exception:
+        return None                                  # not an image Pillow can read
     PRODUCT_IMG_DIR.mkdir(parents=True, exist_ok=True)
-    rel = f"img/products/{uuid.uuid4().hex[:12]}{ext}"
-    (DATA_DIR / rel).write_bytes(data)
+    rel = f"img/products/{uuid.uuid4().hex[:12]}.jpg"
+    img.save(DATA_DIR / rel, "JPEG", quality=88)
     return rel
 
 

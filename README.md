@@ -46,7 +46,9 @@ bash scripts/install_pi.sh          # نصب کامل کیوسک
 
 | فایل | موضوع |
 |---|---|
-| [docs/setup-pi.md](docs/setup-pi.md) | نصب روی رزبری‌پای، از کارت حافظه تا کیوسک |
+| [docs/setup-pi.md](docs/setup-pi.md) | نصب روی رزبری‌پای، از کارت حافظه تا کیوسک (برای کسی که تجربه‌ی برنامه‌نویسی ندارد) |
+| [docs/admin-panel.md](docs/admin-panel.md) | پنل مدیریت: ورود، PIN، محصولات، سفارش‌ها، گزارش، کارهای روزانه |
+| [docs/test-on-ipad.md](docs/test-on-ipad.md) | دیدن و تست باجه روی آیپد (VNC) |
 | [docs/wiring.md](docs/wiring.md) | سیم‌کشی دکمه‌ها، قفل، سنسور، ماسفت‌ها، جدول نورها و ترتیب تحویل |
 | [docs/card-reader.md](docs/card-reader.md) | چه کارتخوانی بخرم و چطور به باجه وصل می‌شود |
 | [docs/payment-zarinpal.md](docs/payment-zarinpal.md) | پرداخت کیوآر، از سندباکس تا حساب واقعی |

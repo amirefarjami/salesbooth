@@ -70,6 +70,7 @@ class PayScreen(Screen):
         self.done = False
         self.t_ms = 0
         self.since_check_ms = 0
+        self.since_db_ms = 0
         # network providers run in a worker so the screen never freezes;
         # DB-backed providers (manual/free) stay on the main thread (sqlite)
         self._threaded = self.provider.name in ("zarinpal", "card")  # network / device I/O
@@ -93,7 +94,26 @@ class PayScreen(Screen):
         if start.qr_payload:
             self.qr = _qr_surface(start.qr_payload, 236)
 
+    def _paid_in_db(self) -> bool:
+        """The operator may approve by hand in the admin panel (fallback)."""
+        owi = self.app.booth.orders.get(self.order_id)
+        return owi is not None and owi.order.status in ("paid", "delivered")
+
+    def _approved_by_operator(self) -> None:
+        if hasattr(self.provider, "cancel"):
+            try:
+                self.provider.cancel()          # stop the pending sale on the reader
+            except Exception:
+                pass
+        self.status = PaymentStatus.APPROVED
+        self.done = True
+        self._shutdown_pool()
+        self.app.open_success(self.order_id, self.code)
+
     def _fail(self, message: str) -> None:
+        if self._paid_in_db():                  # approved by hand meanwhile
+            self._approved_by_operator()
+            return
         # a declined / failed / timed-out order gives its stock back
         self.app.booth.orders.cancel(self.order_id, restock=True)
         self.status = PaymentStatus.DECLINED
@@ -130,6 +150,14 @@ class PayScreen(Screen):
         if self.done:
             return
         cfg = self.app.booth.config
+
+        # manual approval from the admin panel works for every method
+        self.since_db_ms += dt_ms
+        if self.since_db_ms >= 1000:
+            self.since_db_ms = 0
+            if self._paid_in_db():
+                self._approved_by_operator()
+                return
 
         # collect a finished background call
         if self._job is not None:
