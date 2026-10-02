@@ -84,7 +84,8 @@ class Config:
     lock_enabled: bool = True         # auto-simulated when no GPIO lib
     lock_gpio: int = 17               # BCM pin driving the relay
     lock_active_high: bool = True     # relay board polarity
-    door_open_s: int = 20             # countdown once the door is opened (15-25)
+    door_open_s: int = 20             # countdown once the door is opened, for 1 item
+    door_extra_per_item_s: int = 5    # + this for every extra item in the order
     door_warn_s: int = 5              # last N seconds: red light + alarm
     door_wait_s: int = 60             # unlocked but never opened → relock
 
@@ -92,6 +93,12 @@ class Config:
     door_sensor_enabled: bool = True  # auto-simulated (key "d") without GPIO
     door_sensor_gpio: int = 27
     door_open_when_high: bool = True
+
+    # --- booth lighting: MOSFET 1 = main light (PWM), MOSFET 2 = red lights ---
+    lights_enabled: bool = True
+    booth_light_gpio: int = 12
+    warn_light_gpio: int = 13
+    booth_light_dim: float = 0.15     # main light level during the warning
 
     # --- light inside the red confirm button (the only lit button) ---
     red_light_enabled: bool = True

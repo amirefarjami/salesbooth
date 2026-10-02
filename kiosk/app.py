@@ -17,6 +17,7 @@ from hardware.button_light import ButtonLight  # noqa: E402
 from hardware.door import DoorSensor  # noqa: E402
 from hardware.input import KeyboardInput  # noqa: E402
 from hardware.led import LEDStrip  # noqa: E402
+from hardware.lights import BoothLights  # noqa: E402
 from hardware.lock import DoorLock  # noqa: E402
 from kiosk.pay_screen import DoorScreen, PayScreen, SuccessScreen  # noqa: E402
 from kiosk.screens import AttractScreen, CartScreen, GridScreen, MethodScreen  # noqa: E402
@@ -56,6 +57,7 @@ class KioskApp:
         self.lock.lock()
         self.door = DoorSensor(self.cfg)
         self.red = ButtonLight(self.cfg)
+        self.lights = BoothLights(self.cfg)
 
         # the cart: {product_id: qty} + the order things were added in
         self.cart: dict[int, int] = {}
@@ -193,6 +195,8 @@ class KioskApp:
         self.led.tick()
         self.red.set(self.current.red_light())
         self.red.tick()
+        self.lights.set(self.current.lights_mode())
+        self.lights.tick(dt_ms)
         self.current.draw(self.screen)
         if self.theme.scanlines is not None and not self.headless:
             self.screen.blit(self.theme.scanlines, (0, 0))
@@ -214,6 +218,7 @@ class KioskApp:
         self.lock.cleanup()
         self.door.cleanup()
         self.red.cleanup()
+        self.lights.cleanup()
         if isinstance(self.current, PayScreen) and not self.current.done:
             try:
                 self.booth.orders.cancel(self.current.order_id, restock=True)

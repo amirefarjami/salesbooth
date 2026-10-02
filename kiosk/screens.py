@@ -48,6 +48,10 @@ class Screen:
         """Lamp in the red button: 'off' | 'on' | 'blink'."""
         return "off"
 
+    def lights_mode(self) -> str:
+        """Booth lighting (two MOSFETs): 'normal' | 'warn'."""
+        return "normal"
+
     def handle(self, action: str) -> None:  # pragma: no cover
         pass
 

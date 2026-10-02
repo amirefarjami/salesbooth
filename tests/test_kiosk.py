@@ -29,6 +29,8 @@ def app(tmp_path):
     cfg.lock_enabled = False
     cfg.red_light_enabled = False
     cfg.door_open_s = 6
+    cfg.door_extra_per_item_s = 5
+    cfg.lights_enabled = True          # simulated MOSFETs (no GPIO here)
     cfg.door_warn_s = 2
     cfg.door_wait_s = 10
     cfg.pos_sim_approve_s = 0          # simulated reader never answers by itself
@@ -359,3 +361,59 @@ def test_brand_font_never_renders_digits(app):
     sina_h = brand.render(shape("پرداخت"), True, (0, 0, 0)).get_height()
     assert t.text("۶۰,۰۰۰", "md", face="display").get_height() != sina_h
     assert t.text("پرداخت", "md", face="display").get_height() == sina_h
+
+
+# --- door timer, ring direction, warning lights ----------------------------
+
+def _open_door(app, monkeypatch, products):
+    pay = to_pay(app, "slot2", products)
+    approve(app, pay, monkeypatch)
+    app.step(3300)
+    app.door.set_sim(True)
+    app.step(16)
+    return app.current
+
+
+def test_door_timer_base_for_one_item(app, monkeypatch):
+    door = _open_door(app, monkeypatch, ("slot1",))
+    assert door.open_ms == 6_000                       # base only
+
+
+def test_door_timer_adds_per_extra_item(app, monkeypatch):
+    door = _open_door(app, monkeypatch, ("slot1", "slot1", "slot4"))   # 3 items
+    assert door.open_ms == (6 + 5 * 2) * 1000
+
+
+def test_default_door_timer_is_20s_plus_5_per_item():
+    cfg = Config()
+    assert cfg.door_open_s == 20 and cfg.door_extra_per_item_s == 5
+    assert cfg.door_warn_s == 5
+
+
+def test_last_seconds_dim_booth_and_light_red(app, monkeypatch):
+    door = _open_door(app, monkeypatch, ("slot1",))
+    app.step(500)
+    assert app.lights.mode == "normal" and app.lights.main == 1.0
+    app.step(4000)                                      # 1.5 s left of 6 s
+    assert door.warning and app.lights.mode == "warn"
+    app.step(600)                                       # fade done
+    assert app.lights.main == pytest.approx(app.cfg.booth_light_dim)
+    assert app.lights.red == 1.0
+    app.step(2000)                                      # overtime: still warning
+    assert door.state == "overtime" and app.lights.mode == "warn"
+    app.door.set_sim(False)
+    app.step(16)
+    app.step(600)
+    assert app.lights.mode == "normal" and app.lights.main == 1.0 and app.lights.red == 0.0
+
+
+def test_ring_empties_from_the_left_counter_clockwise():
+    from kiosk.theme import K, ring_progress
+    surf = pygame.Surface((200, 200))
+    surf.fill((0, 0, 0))
+    ring_progress(surf, (100, 100), 80, 20, 0.75, (255, 0, 0))
+    # ring band at radius 70: 10:30 (top-left) vs 1:30 (top-right)
+    top_left, top_right = surf.get_at((50, 50))[:3], surf.get_at((150, 50))[:3]
+    bottom = surf.get_at((100, 170))[:3]
+    assert top_right == (255, 0, 0) and bottom == (255, 0, 0)   # still full
+    assert top_left == K["paper_2"]     # emptied from 12 o'clock to the left (CCW)

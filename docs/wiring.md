@@ -24,6 +24,8 @@ N-th product (admin sort order). Only the first 6 active products are shown.
 | Showcase lock relay | 17 (`lock_gpio`) | 12 V solenoid through a relay; ON = unlocked |
 | Door sensor (reed switch) | 27 (`door_sensor_gpio`) | switch between pin and GND, internal pull-up; door shut = LOW |
 | Red button lamp | 22 (`red_light_gpio`) | through a transistor/relay if the lamp is 12 V |
+| MOSFET 1 — booth main light | 12 (`booth_light_gpio`) | PWM-dimmed (logic-level MOSFET, e.g. IRLZ44N) |
+| MOSFET 2 — red warning lights | 13 (`warn_light_gpio`) | on during the last seconds and any overtime |
 | WS2812B LED strip | 18 (`led_gpio`) | data line; needs root (rpi_ws281x) |
 
 ## Hand-over sequence (semi-automatic — an operator is always there)
@@ -32,9 +34,12 @@ N-th product (admin sort order). Only the first 6 active products are shown.
 2. Lock relay ON: the screen says «در ویترین رو باز کن و خریدت رو بردار»
    and lists the items (with the order code); the operator watches.
 3. Door sensor sees the door open → relay OFF (the latch catches again on
-   closing) and the countdown (`door_open_s`, 20 s) starts.
-4. Last `door_warn_s` seconds: red light + alarm; after the countdown the
-   alarm keeps going until the door is shut.
+   closing) and the countdown starts: 20 s for one item, +5 s for every
+   extra item (`door_open_s`, `door_extra_per_item_s`). The ring empties
+   from 12 o'clock counter-clockwise (RTL).
+4. Last 5 s (`door_warn_s`): beep-beep every second, MOSFET 1 dims the
+   booth light, MOSFET 2 turns the red lights on. After the countdown this
+   keeps going until the door is shut.
 5. Door shut → order marked delivered, back to the attract screen.
    Door never opened within `door_wait_s` → lock again; the operator can
    mark the order delivered in the admin panel.

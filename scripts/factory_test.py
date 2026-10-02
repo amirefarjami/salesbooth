@@ -3,7 +3,8 @@
 
 Shows every button press on screen (with the mapped key), lights the
 LED strip in the matching color, shows the door sensor (open/closed), and
-on the red button lights its lamp and pulses the lock relay for 1 s — so
+on the red button lights its lamp, pulses the lock relay and switches the
+booth lights to the warning look (MOSFET 1 dim, MOSFET 2 red) for 1 s — so
 all wiring can be verified before the booth is assembled. Ctrl-Q quits (ESC is the cancel button, so it is shown, not quit).
 
 Run on the Pi:   .venv/bin/python scripts/factory_test.py
@@ -25,6 +26,7 @@ from hardware.input import SLOT_ACTIONS, Action, build_action_map  # noqa: E402
 from hardware.button_light import ButtonLight  # noqa: E402
 from hardware.door import DoorSensor  # noqa: E402
 from hardware.led import LEDStrip  # noqa: E402
+from hardware.lights import BoothLights  # noqa: E402
 from hardware.lock import DoorLock  # noqa: E402
 from kiosk.theme import BTN_COLORS, PAL  # noqa: E402
 
@@ -56,6 +58,7 @@ def main() -> int:
     door = DoorSensor(cfg)
     red = ButtonLight(cfg)
     lock = DoorLock(cfg)
+    lights = BoothLights(cfg)
     red_until = 0
 
     pressed: list[tuple[str, str]] = []
@@ -82,6 +85,8 @@ def main() -> int:
         now = pygame.time.get_ticks()
         red.set("on" if now < red_until else "off")
         red.tick()
+        lights.set("warn" if now < red_until else "normal")   # MOSFET 1 dim + MOSFET 2 red
+        lights.tick(clock.get_time())
         if now >= red_until and lock.is_open:
             lock.lock()
 
@@ -102,6 +107,7 @@ def main() -> int:
         clock.tick(30)
     leds.cleanup()
     red.cleanup()
+    lights.cleanup()
     lock.cleanup()
     door.cleanup()
     pygame.quit()

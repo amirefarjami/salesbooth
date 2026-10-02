@@ -45,7 +45,7 @@ class SoundEngine:
             "success": (self._sfx_success, 0.6),
             "error": (self._sfx_error, 0.35),
             "boot": (self._sfx_boot, 0.4),
-            "alarm": (self._sfx_alarm, 0.3),
+            "alarm": (self._sfx_alarm, 0.28),
             "fanfare": (self._sfx_fanfare, 2.1),
         }
         for name, (gen, dur) in synth.items():
@@ -97,10 +97,14 @@ class SoundEngine:
         return 0.4 * env * math.sin(2 * math.pi * f * t)
 
     def _sfx_alarm(self, t, p):
-        # two-tone square-ish beep for the closing showcase door
-        f = 880 if t < 0.12 else 660
-        sq = 1.0 if math.sin(2 * math.pi * f * t) >= 0 else -1.0
-        return 0.35 * sq * (1.0 - p) ** 0.5
+        # «بیق بیق»: two short sharp beeps (2.2 kHz square) per second
+        for start in (0.0, 0.16):
+            lt = t - start
+            if 0 <= lt < 0.1:
+                env = min(1.0, lt / 0.004) * (1.0 if lt < 0.085 else (0.1 - lt) / 0.015)
+                sq = 1.0 if math.sin(2 * math.pi * 2200 * lt) >= 0 else -1.0
+                return 0.42 * env * sq
+        return 0.0
 
     # «you won» fanfare for a successful payment: square-wave lead, triangle
     # bass, a noise snare on the beats, a held major chord at the end

@@ -42,13 +42,20 @@ order_ttl_minutes = 30
 lock_enabled = true
 lock_gpio = 17
 lock_active_high = true
-door_open_s = 20      # countdown once the door is open (15-25 s)
-door_warn_s = 5       # last seconds: lights dim, red light + alarm
+door_open_s = 20             # countdown once the door is open, for 1 item
+door_extra_per_item_s = 5    # + 5 s for every extra item (2 items = 25 s)
+door_warn_s = 5              # last seconds: beep-beep, booth dims, red lights on
 door_wait_s = 60      # unlocked but never opened → lock again
 
 door_sensor_enabled = true
 door_sensor_gpio = 27
 door_open_when_high = true   # reed closed (door shut) pulls the pin low
+
+# booth lighting on two MOSFETs: 1 = main light (PWM), 2 = red warning lights
+lights_enabled = true
+booth_light_gpio = 12
+warn_light_gpio = 13
+booth_light_dim = 0.15       # main light level during the warning
 
 # lamp inside the red confirm button (the only lit button)
 red_light_enabled = true
