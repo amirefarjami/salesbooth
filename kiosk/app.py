@@ -34,10 +34,18 @@ class KioskApp:
         self.booth.orders.expire_stale(self.cfg.order_ttl_minutes)
         self._providers: dict = {}
 
+        # the UI is always drawn portrait (screen_w × screen_h); a panel that
+        # is physically landscape gets the frame rotated by screen_rotate
+        self.rotate = int(getattr(self.cfg, "screen_rotate", 0)) % 360
+        self._display = None
         if not headless:
             flags = pygame.FULLSCREEN | pygame.SCALED if self.cfg.fullscreen else 0
-            self.screen = pygame.display.set_mode(
-                (self.cfg.screen_w, self.cfg.screen_h), flags)
+            size = (self.cfg.screen_w, self.cfg.screen_h)
+            if self.rotate in (90, 270):
+                size = size[::-1]
+            self._display = pygame.display.set_mode(size, flags)
+            self.screen = (self._display if self.rotate == 0
+                           else pygame.Surface((self.cfg.screen_w, self.cfg.screen_h)))
             pygame.display.set_caption("CHIZ Booth")
             pygame.display.set_icon(self._make_icon())
             if self.cfg.fullscreen:
@@ -210,6 +218,9 @@ class KioskApp:
             if self.input.quit_requested:
                 break
             self.step(dt_ms, actions)
+            if self.rotate:
+                # pygame rotates counter-clockwise; screen_rotate is clockwise
+                self._display.blit(pygame.transform.rotate(self.screen, -self.rotate), (0, 0))
             pygame.display.flip()
         self.shutdown()
         return 0

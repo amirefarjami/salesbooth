@@ -1,9 +1,11 @@
-# docs
+# docs — مستندات باجه‌ی چیز
 
-Field documentation for building and running the booth:
+| فایل | موضوع |
+|---|---|
+| [setup-pi.md](setup-pi.md) | نصب روی رزبری‌پای قدم‌به‌قدم: کارت حافظه، تست روی دسکتاپ، نصب کامل کیوسک، به‌روزرسانی، بکاپ |
+| [wiring.md](wiring.md) | ۸ دکمه و انکودر USB، رله‌ی قفل، سنسور در، لامپ دکمه‌ی قرمز، دو ماسفت نور، جدول صحنه‌های نوری، ترتیب تحویل |
+| [card-reader.md](card-reader.md) | انتخاب کارتخوان (پی‌سی‌پوز، لینوکسی یا اندرویدی) و سؤال‌هایی که از PSP بپرسی |
+| [payment-zarinpal.md](payment-zarinpal.md) | پرداخت کیوآر زرین‌پال: سندباکس و حساب واقعی |
+| [troubleshooting.md](troubleshooting.md) | عیب‌یابی صفحه، دکمه‌ها، سخت‌افزار، صدا، پرداخت و پنل |
 
-- `setup-pi.md` — flashing the SD card, kiosk autostart, service units
-- `monitor-480x800.md` — display config, rotation, EDID notes
-- `wiring.md` — 8 buttons, USB encoder, lock relay, door sensor, red lamp, LED strip + hand-over sequence
-- `troubleshooting.md` — common failures and fixes
-- `payment-zarinpal.md` — sandbox → live switch for the Zarinpal gateway
+مانیتور: اگر پنل ۸۰۰×۴۸۰ افقی نصب شده، در `booth.toml` مقدار `screen_rotate = 90` (یا `270`) را بگذار. برنامه همیشه عمودی نقاشی می‌کند و تصویر را می‌چرخاند.

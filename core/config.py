@@ -34,6 +34,7 @@ class Config:
     screen_w: int = 480
     screen_h: int = 800
     fullscreen: bool = False          # True on the Pi kiosk (via --fullscreen)
+    screen_rotate: int = 0            # 0 | 90 | 180 | 270 (clockwise) for a landscape panel
     fps: int = 60
     scanlines: bool = False           # CRT scanline overlay (off: the
                                       # «کمیک قورمه» look is flat paper)
