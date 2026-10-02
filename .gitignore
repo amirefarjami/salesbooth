@@ -34,3 +34,6 @@ Thumbs.db
 # copy it to assets/fonts/ on each booth by hand. Lalezar is the fallback.
 assets/fonts/SSINABD.TTF
 assets/fonts/ssinabd.ttf
+
+# Claude Code local launch config
+.claude/

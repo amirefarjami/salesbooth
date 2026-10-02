@@ -16,6 +16,9 @@ that presents itself as a keyboard, so the laptop simulator is identical.
     CANCEL   escape        «انصراف»
     DOOR_SIM d             laptop only: open/close the showcase door
 
+With a PCF8574 I2C expander (buttons_source = "pcf8574") the buttons are
+read over I2C instead — see hardware/pcf8574.py; the keyboard still works.
+
 Many «Zero Delay» encoders show up as a GAMEPAD instead of a keyboard; then
 map its buttons as "joy0", "joy1", … (make factory-test shows each
 button's number when pressed).
@@ -111,6 +114,9 @@ class KeyboardInput:
         self.action_map = build_action_map(cfg)
         self.quit_requested = False
         self._pads: dict = {}
+        from hardware.pcf8574 import PCF8574Buttons
+
+        self.panel = PCF8574Buttons(cfg)    # I2C buttons (if buttons_source = pcf8574)
         try:
             import pygame
 
@@ -150,4 +156,9 @@ class KeyboardInput:
                     actions.append(act)
             elif ev.type == pygame.JOYDEVICEADDED:
                 self._open_pad(ev.device_index)     # encoder plugged in later
+        for name in self.panel.poll():              # PCF8574 panel buttons
+            try:
+                actions.append(Action(name))
+            except ValueError:
+                pass
         return actions

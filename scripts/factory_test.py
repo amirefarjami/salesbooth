@@ -56,6 +56,11 @@ def main() -> int:
     action_map = build_action_map(cfg)
     pygame.joystick.init()
     pads = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+    from hardware.pcf8574 import PCF8574Buttons
+    cfg.buttons_source = "pcf8574"           # always try the I2C module here
+    panel = PCF8574Buttons(cfg)
+    events: list = []
+    shown_unmapped: set = set()
     leds = LEDStrip(cfg)
     door = DoorSensor(cfg)
     red = ButtonLight(cfg)
@@ -82,7 +87,21 @@ def main() -> int:
                 pads.append(pygame.joystick.Joystick(ev.device_index))
             if code is None:
                 continue
-            act = action_map.get(code)
+            events.append((action_map.get(code), name))
+
+        # PCF8574 I2C button module: debounced presses + which P-pin
+        if panel.ok:
+            for act_name in panel.poll():
+                pin = next(p for p, a in panel.pin_to_action.items() if a == act_name)
+                events.append((Action(act_name), f"P{pin}"))
+            held = panel.pressed_pins()
+            for pin in held:
+                if pin not in panel.pin_to_action and pin not in shown_unmapped:
+                    shown_unmapped.add(pin)
+                    events.append((None, f"P{pin}"))
+            shown_unmapped &= set(held)
+
+        for act, name in events:
             if act is None:
                 # unmapped: show what to put in booth.toml [booth.keymap]
                 pressed.insert(0, ("نگاشت‌نشده", f'"{name}"'))
@@ -95,6 +114,7 @@ def main() -> int:
                 pressed.insert(0, (LABELS.get(act, act.value), f'"{name}"'))
                 leds._set_all(LED_COLOR.get(act, (255, 255, 255)))
             pressed = pressed[:8]
+        events.clear()
 
         now = pygame.time.get_ticks()
         red.set("on" if now < red_until else "off")
@@ -105,12 +125,16 @@ def main() -> int:
             lock.lock()
 
         screen.fill(PAL["bg_deep"])
+        mod = (f"ماژول دکمه PCF8574: وصل (0x{panel.address:02x})" if panel.ok
+               else "ماژول دکمه PCF8574: پیدا نشد (کیبورد کار می‌کند)")
+        ms = fonts.render(shape(mod), True, PAL["green"] if panel.ok else PAL["gray"])
+        screen.blit(ms, ms.get_rect(midtop=(cfg.screen_w // 2, 116)))
         state = fonts.render(shape("در ویترین: " + ("باز" if door.is_open else "بسته")),
                              True, PAL["amber"] if door.is_open else PAL["cream"])
         screen.blit(state, state.get_rect(midtop=(cfg.screen_w // 2, 80)))
         title = fa_big.render(shape("تست سیم‌کشی باجه"), True, PAL["amber"])
         screen.blit(title, title.get_rect(midtop=(cfg.screen_w // 2, 30)))
-        y = 120
+        y = 160
         for label, key in pressed:
             row = fonts.render(shape(f"{label}  {key}"), True, PAL["cream"])
             screen.blit(row, (60, y))
@@ -124,6 +148,7 @@ def main() -> int:
     lights.cleanup()
     lock.cleanup()
     door.cleanup()
+    panel.close()
     pygame.quit()
     return 0
 

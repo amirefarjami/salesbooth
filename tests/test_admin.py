@@ -156,4 +156,18 @@ def test_products_page_shows_booth_button(client):
     booth.products.create("اولی", 1000, stock=1, sort_order=1)
     booth.products.create("دومی", 1000, stock=1, sort_order=2)
     r = client.get("/admin/products")
-    assert "دکمه‌ی 1" in r.text and "دکمه‌ی 2" in r.text
+    assert "دکمه‌ی ۱" in r.text and "دکمه‌ی ۲" in r.text
+
+
+def test_real_connection_survives_thread_pool(tmp_path, monkeypatch):
+    """Regression: one shared SQLite connection crashed on pool threads."""
+    monkeypatch.setenv("CHIZ_DB_PATH", str(tmp_path / "real.db"))
+    _state["booth"] = None
+    _state["tokens"] = set()
+    with TestClient(app) as c:
+        assert c.post("/admin/login", data={"pin": "1390"},
+                      follow_redirects=False).status_code == 303
+        for _ in range(15):
+            for path in ("/admin", "/admin/products", "/admin/orders",
+                         "/admin/reports", "/admin/api/open-orders"):
+                assert c.get(path).status_code == 200, path

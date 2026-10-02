@@ -1,30 +1,36 @@
 {% extends "base.html" %}
 {% set nav = 'reports' %}
 {% block body %}
-<div class="panel">
-  <h2>گزارش فروش</h2>
-  <div class="row">
-    <a href="/admin/reports?days=7"><button class="small">۷ روز</button></a>
-    <a href="/admin/reports?days=14"><button class="small">۱۴ روز</button></a>
-    <a href="/admin/reports?days=30"><button class="small">۳۰ روز</button></a>
-    <a href="/admin/reports/export.csv?days=30"><button class="small">⬇️ خروجی CSV</button></a>
+<div class="card">
+  <h2>گزارش فروش — {{ days|fa }} روز</h2>
+  <div class="actions">
+    {% for d in (7, 14, 30) %}
+    <a class="btn {% if days == d %}primary{% endif %} grow" href="/admin/reports?days={{ d }}">{{ d|fa }} روز</a>
+    {% endfor %}
   </div>
-  <h3 style="margin-top:14px">فروش روزانه ({{ days }} روز)</h3>
-  <table>
+  <div class="actions">
+    <a class="btn grow" href="/admin/reports/export.csv?days=30">⬇️ فایل اکسل (CSV) — ۳۰ روز</a>
+  </div>
+  <p class="muted" style="margin-top:8px">فقط سفارش‌های پرداخت‌شده و تحویل‌شده حساب می‌شوند.</p>
+</div>
+
+<div class="card">
+  <h2>فروش روزانه</h2>
+  <div class="table-wrap"><table>
     <tr><th>روز</th><th>سفارش</th><th>فروش</th></tr>
     {% for d in daily %}
-    <tr><td class="muted">{{ d.day }}</td><td>{{ d.orders }}</td>
-        <td class="price">{{ d.revenue|toman }}</td></tr>
-    {% endfor %}
-  </table>
+    <tr><td class="muted">{{ d.day|jday }}</td><td>{{ d.orders|fa }}</td><td class="price">{{ d.revenue|toman }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">فروشی در این بازه نیست.</td></tr>{% endfor %}
+  </table></div>
+</div>
 
-  <h3 style="margin-top:14px">پرفروش‌ها</h3>
-  <table>
+<div class="card">
+  <h2>پرفروش‌ها</h2>
+  <div class="table-wrap"><table>
     <tr><th>محصول</th><th>تعداد</th><th>فروش</th></tr>
     {% for t in top %}
-    <tr><td>{{ t.name }}</td><td>{{ t.qty }}</td>
-        <td class="price">{{ t.revenue|toman }}</td></tr>
-    {% endfor %}
-  </table>
+    <tr><td>{{ t.name }}</td><td>{{ t.qty|fa }}</td><td class="price">{{ t.revenue|toman }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">—</td></tr>{% endfor %}
+  </table></div>
 </div>
 {% endblock %}
