@@ -60,12 +60,16 @@ def to_pay(app, method_slot="slot2", products=("slot1",)):
     return app.current
 
 
-def settle(app, pay, ms=8000):
-    """Step until the payment leaves the pay screen (card/QR run threaded)."""
+def settle(app, pay, ms=8000, real=False):
+    """Step until the payment leaves the pay screen (card/QR run threaded).
+    real=True also lets wall-clock time pass (the simulated reader uses it)."""
+    import time
     for _ in range(ms // 50):
         app.step(50)
         if app.current is not pay:
             return
+        if real:
+            time.sleep(0.02)
 
 
 def approve(app, pay, monkeypatch):
@@ -229,8 +233,12 @@ def test_card_reader_approves_automatically(app):
     app._providers.clear()
     app.cfg.payment_poll_seconds = 0.1
     pay = to_pay(app, "slot2")
+    for _ in range(100):               # begin() runs on the worker thread
+        if pay.start is not None:
+            break
+        app.step(10)
     assert pay.provider.driver.amount_rial == 10_000 * 10   # amount went to the reader
-    settle(app, pay)
+    settle(app, pay, real=True)
     assert app.current_name == "success"
     assert app.booth.orders.get(pay.order_id).order.status == "paid"
     assert app.booth.orders.get(pay.order_id).order.provider == "card"
@@ -393,7 +401,7 @@ def test_default_door_timer_is_20s_plus_5_per_item():
 def test_last_seconds_dim_booth_and_light_red(app, monkeypatch):
     door = _open_door(app, monkeypatch, ("slot1",))
     app.step(500)
-    assert app.lights.mode == "normal" and app.lights.main == 1.0
+    assert app.lights.mode == "door" and app.lights.main == 1.0
     app.step(4000)                                      # 1.5 s left of 6 s
     assert door.warning and app.lights.mode == "warn"
     app.step(600)                                       # fade done
@@ -404,7 +412,8 @@ def test_last_seconds_dim_booth_and_light_red(app, monkeypatch):
     app.door.set_sim(False)
     app.step(16)
     app.step(600)
-    assert app.lights.mode == "normal" and app.lights.main == 1.0 and app.lights.red == 0.0
+    assert door.state == "done"                          # «thanks» still lit fully
+    assert app.lights.mode == "door" and app.lights.main == 1.0 and app.lights.red == 0.0
 
 
 def test_ring_empties_from_the_left_counter_clockwise():
@@ -417,3 +426,113 @@ def test_ring_empties_from_the_left_counter_clockwise():
     bottom = surf.get_at((100, 170))[:3]
     assert top_right == (255, 0, 0) and bottom == (255, 0, 0)   # still full
     assert top_left == K["paper_2"]     # emptied from 12 o'clock to the left (CCW)
+
+
+# --- light scenes and effects (two MOSFETs) --------------------------------
+
+def _levels(lights, mode, seconds, step_ms=20):
+    """Run a scene alone; returns [(t, main, red)]."""
+    lights.set(mode)
+    out = []
+    for i in range(int(seconds * 1000 / step_ms)):
+        lights.tick(step_ms)
+        out.append(((i + 1) * step_ms / 1000, lights.main, lights.red))
+    return out
+
+
+def _rises(samples, idx, thr=0.5):
+    out, prev = [], samples[0][idx]
+    for row in samples[1:]:
+        if prev < thr <= row[idx]:
+            out.append(row[0])
+        prev = row[idx]
+    return out
+
+
+def _max_per_second(times):
+    return max((sum(1 for u in times if t <= u < t + 1) for t in times), default=0)
+
+
+def test_attract_breathes_60_to_100(app):
+    lv = _levels(app.lights, "attract", 8)[25:]          # after the cross-fade
+    mains = [m for _, m, _ in lv]
+    assert min(mains) == pytest.approx(0.6, abs=0.02)
+    assert max(mains) == pytest.approx(1.0, abs=0.02)
+
+
+def test_attract_insert_coin_call_and_lamp(app):
+    app.step(16)
+    app.step(21_900)                                    # just before the call at 22 s
+    assert app.lights.red == 0.0 and not app.lights.calling
+    app.step(150)
+    assert app.lights.calling and app.red.mode == "fast"
+    rises = []
+    prev = app.lights.red
+    for _ in range(60):
+        app.step(20)
+        if prev < 0.5 <= app.lights.red:
+            rises.append(app.lights.scene_t)
+        prev = app.lights.red
+    assert len(rises) == 1                              # the second of the two pulses
+    app.step(2000)
+    assert not app.lights.calling and app.red.mode == "blink"
+
+
+def test_poweron_ramps_from_low(app):
+    app.step(16)
+    app.step(16, ["confirm"])
+    assert app.lights.effect == "poweron" and app.lights.main < 0.5
+    app.step(600)
+    assert app.lights.effect is None
+    assert app.lights.main == pytest.approx(app.cfg.booth_light_level, abs=0.02)
+
+
+def test_product_blip_goes_brighter(app):
+    app.go("grid")
+    app.step(700)
+    base = app.lights.main
+    app.step(16, ["slot1"])
+    assert app.lights.main > base + 0.08               # the blip
+    app.step(300)
+    assert app.lights.main == pytest.approx(base, abs=0.01)
+
+
+def test_paywait_pulses_calmly(app):
+    to_pay(app)
+    mains = []
+    for _ in range(150):
+        app.step(20)
+        mains.append(app.lights.main)
+    assert app.lights.mode == "paywait"
+    assert 0.55 < min(mains[25:]) < max(mains[25:]) <= 0.86
+
+
+def test_celebrate_follows_fanfare_and_ends_full(app):
+    from hardware.lights import FANFARE_NOTES
+    lv = _levels(app.lights, "celebrate", 2.0, step_ms=5)
+    peaks = [t for (t, m, _), (_, pm, _) in zip(lv[1:], lv) if m > pm + 0.05]
+    for note in FANFARE_NOTES[1:]:                       # a pulse on every note
+        assert any(abs(p - note) < 0.012 for p in peaks), note
+    assert min(m for _, m, _ in lv) >= 0.69             # soft: never dark
+    assert lv[-1][1:] == (1.0, 0.0)                     # full on the final chord
+
+
+def test_fail_two_slow_red_pulses(app):
+    app.lights.set("shop")
+    for _ in range(40):
+        app.lights.tick(20)
+    app.lights.trigger("fail")
+    samples = []
+    for i in range(90):
+        app.lights.tick(20)
+        samples.append(((i + 1) * 0.02, app.lights.main, app.lights.red))
+    assert len(_rises(samples, 2)) + 1 == 2              # on at t=0, again at 0.7 s
+    assert min(m for _, m, _ in samples[:25]) <= 0.4      # main dips
+    assert samples[-1][1] == pytest.approx(0.85, abs=0.01)
+
+
+@pytest.mark.parametrize("mode", ["attract", "celebrate", "paywait", "warn", "door", "shop"])
+def test_no_full_flashing_faster_than_3_per_second(app, mode):
+    lv = _levels(app.lights, mode, 30 if mode == "attract" else 3, step_ms=5)
+    assert _max_per_second(_rises(lv, 2)) <= 3            # red channel
+    assert _max_per_second(_rises([(t, m, r) for t, m, r in lv], 1, thr=0.3)) <= 3

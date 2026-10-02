@@ -31,12 +31,14 @@ class ButtonLight:
         return self._lit
 
     def set(self, mode: str) -> None:
-        """'off' | 'on' | 'blink'."""
-        self.mode = mode if mode in ("off", "on", "blink") else "off"
+        """'off' | 'on' | 'blink' | 'fast' (the «insert coin» call)."""
+        self.mode = mode if mode in ("off", "on", "blink", "fast") else "off"
 
     def tick(self) -> None:
         if self.mode == "blink":
             want = int(time.time() * 2.5) % 2 == 0
+        elif self.mode == "fast":                  # small lamp: 3 blinks/s
+            want = int(time.time() * 6) % 2 == 0
         else:
             want = self.mode == "on"
         if want != self._lit:

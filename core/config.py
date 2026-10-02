@@ -99,6 +99,7 @@ class Config:
     booth_light_gpio: int = 12
     warn_light_gpio: int = 13
     booth_light_dim: float = 0.15     # main light level during the warning
+    booth_light_level: float = 0.85   # main light while shopping (blip goes to 100 %)
 
     # --- light inside the red confirm button (the only lit button) ---
     red_light_enabled: bool = True

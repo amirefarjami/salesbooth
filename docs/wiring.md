@@ -28,6 +28,23 @@ N-th product (admin sort order). Only the first 6 active products are shown.
 | MOSFET 2 — red warning lights | 13 (`warn_light_gpio`) | on during the last seconds and any overtime |
 | WS2812B LED strip | 18 (`led_gpio`) | data line; needs root (rpi_ws281x) |
 
+## Light scenes (MOSFET 1 = main, MOSFET 2 = red; `hardware/lights.py`)
+
+| When | Main light | Red lights | Red button lamp |
+|---|---|---|---|
+| Attract | breathes 60–100 % every 4 s | two short pulses every 25 s («insert coin») | blinks; fast during the call |
+| Red pressed on attract | ramps up from 20 % in 0.5 s («power on») | — | — |
+| Shopping | steady 85 % | off | blinks when red does something |
+| Product added | short flash to 100 % | — | — |
+| Waiting for payment | calm pulse 59–85 % | off | off |
+| Payment approved | soft pulse on every fanfare note, full on the final chord | on/off on the music's phrases | off |
+| Payment failed | dips to 40 % | two slow pulses | blinks (red = try again) |
+| Door open | 100 % (showcase lit) | off | off |
+| Last 5 s / overtime | dimmed to 15 % | on | off |
+
+Scene changes cross-fade in 0.4 s. Nothing flashes fully on/off more than 3
+times a second (photosensitivity) — a test enforces it.
+
 ## Hand-over sequence (semi-automatic — an operator is always there)
 
 1. Payment approved → success animation on the screen.
