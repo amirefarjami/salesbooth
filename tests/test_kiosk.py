@@ -353,10 +353,32 @@ def test_shutdown_cancels_pending_and_locks(app):
 
 def test_attract_cycles_brand_and_posters(app):
     a = app.current
+    a.hold_ms = 0                        # skip the how-to hold
     assert a.SLIDES[a.slide][0] == "brand"
     app.step(9_100)
     assert a.SLIDES[a.slide][0].startswith("poster")
     app.step(16)
+
+
+def test_button_press_holds_howto_two_minutes(app):
+    a = app.current
+    a.hold_ms = 0
+    app.step(9_100)
+    assert a.SLIDES[a.slide][0].startswith("poster")   # screensaver running
+    app.step(16, ["slot3"])                            # someone pressed a button
+    assert a.SLIDES[a.slide][0] == "brand"
+    app.step(119_000)
+    assert a.SLIDES[a.slide][0] == "brand"             # still the how-to
+    app.step(1_100)
+    app.step(9_100)
+    assert a.SLIDES[a.slide][0].startswith("poster")   # back to the posters
+
+
+def test_back_from_shopping_shows_howto_first(app):
+    app.step(16, ["confirm"])
+    app.step(16, ["cancel"])                           # leave the grid
+    a = app.current
+    assert app.current_name == "attract" and a.hold_ms > 100_000
 
 
 def test_brand_font_never_renders_digits(app):

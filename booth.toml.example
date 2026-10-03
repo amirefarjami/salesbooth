@@ -12,6 +12,7 @@ scanlines = false        # flat «کمیک قورمه» look
 scanline_strength = 32
 
 attract_timeout_s = 60
+attract_hold_s = 120         # after a button press the how-to page stays 2 min before the posters
 
 sound = true
 sfx_volume = 0.8

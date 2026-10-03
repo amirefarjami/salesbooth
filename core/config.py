@@ -42,6 +42,7 @@ class Config:
 
     # --- attract mode ---
     attract_timeout_s: int = 60       # idle seconds before attract screen
+    attract_hold_s: int = 120         # how-to slide stays this long before the posters
 
     # --- sound ---
     sound: bool = True
