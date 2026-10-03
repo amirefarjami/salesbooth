@@ -13,6 +13,7 @@ starts the countdown.
 from __future__ import annotations
 
 import math
+import time
 
 import pygame
 
@@ -21,7 +22,7 @@ from core.fa import fa_digits
 from core.models import Product
 from hardware.input import slot_index
 from kiosk.theme import K, OFF_SM, arrow, marker_dot, plate, selected_card
-from kiosk.widgets import ProductCard, load_product_image, price_fa, slot_tag
+from kiosk.widgets import ProductCard, load_product_image, photo_size, price_fa, slot_tag
 
 SLOTS = 6
 COLS = 2
@@ -68,7 +69,7 @@ def _press(t_ms: int, period: int = 1400) -> float:
     return max(0.0, 1.0 - abs(p - 0.08) / 0.08) if p < 0.16 else 0.0
 
 
-def slot_geometry(t, top: int = 84, card_h: int = 150, gap_y: int = 20,
+def slot_geometry(t, top: int = 40, card_h: int = 176, gap_y: int = 18,
                   margin_x: int = 36, gap_x: int = 20):
     """Card rect + side for slots 1..6: odd slots on the left column (next to
     the left buttons), even slots on the right."""
@@ -97,11 +98,17 @@ class AttractScreen(Screen):
         self.t_ms = 0
         self.slide_ms = 0
         self.slide = 0
+        self.hold_ms = 0          # keep the how-to slide up (no screensaver)
+
+    def _hold_howto(self) -> None:
+        """Show the brand/how-to slide and keep it for attract_hold_s."""
+        self.slide = 0
+        self.slide_ms = 0
+        self.hold_ms = int(getattr(self.app.cfg, "attract_hold_s", 120)) * 1000
 
     def enter(self) -> None:
         super().enter()
-        self.slide = 0
-        self.slide_ms = 0
+        self._hold_howto()        # back from a purchase / timeout: how-to first
 
     def red_light(self) -> str:
         return "blink"            # «press the red button» is the call to action
@@ -111,6 +118,9 @@ class AttractScreen(Screen):
 
     def tick(self, dt_ms: int) -> None:
         self.t_ms += dt_ms
+        if self.hold_ms > 0:      # someone is looking: no posters yet
+            self.hold_ms -= dt_ms
+            return
         self.slide_ms += dt_ms
         name, secs = self.SLIDES[self.slide]
         if self.slide_ms >= secs * 1000:
@@ -126,6 +136,8 @@ class AttractScreen(Screen):
             self.app.sounds.play("select")
             self.app.lights.trigger("poweron")
             self.app.go("grid")
+        else:                                 # any other button: show how to buy
+            self._hold_howto()
 
     def draw(self, surf: pygame.Surface) -> None:
         name = self.SLIDES[self.slide][0]
@@ -246,7 +258,7 @@ class GridScreen(Screen):
             key = (p.id, p.image_path)
             if key not in self.images:
                 self.images[key] = load_product_image(
-                    DATA_DIR, p.image_path, rect.w - 24, rect.h - 72)
+                    DATA_DIR, p.image_path, *photo_size(rect))
             card.image = self.images[key]
             self.cards.append(card)
         if self.focus is not None and self.focus >= len(self.cards):
@@ -338,21 +350,15 @@ class GridScreen(Screen):
         self._draw_action_bar(surf, t)
 
     def _draw_header(self, surf, t) -> None:
-        logo = t.image("chiz-wordmark.png", height=60)
-        right = t.w - 24
-        if logo is not None:
-            r = logo.get_rect(topright=(right, 14))
-            surf.blit(logo, r)
-            right = r.left - 10
-        t.kicker(surf, "باجه‌ی فروش", {"topright": (right, 30)},
-                 color=K["alt_ink"], marker=K["hi"], size="sm")
-        t.kicker(surf, "قیمت‌ها به تومان", {"topleft": (28, 32)},
-                 color=K["alt_ink"], size="xs")
+        # just a small 24-hour clock, top-left; the rest of the top is cards
+        now = time.localtime()
+        clock = t.text(fa_digits(f"{now.tm_hour:02d}:{now.tm_min:02d}"), "sm", K["alt_ink"])
+        surf.blit(clock, clock.get_rect(topleft=(30, 18)))
 
     def _draw_action_bar(self, surf, t) -> None:
-        top = slot_geometry(t)[-1][0].bottom + 14
+        top = slot_geometry(t)[-1][0].bottom + 12
         # 1) details of the product last pressed (or the hint)
-        info = pygame.Rect(36, top, t.w - 72, 46)
+        info = pygame.Rect(36, top, t.w - 72, 44)
         if self.toast_ms:
             plate(surf, info, K["hi"], shadow=OFF_SM)
             s = t.fit_text(self.toast, info.w - 20, ("sm", "xs"))
@@ -374,7 +380,7 @@ class GridScreen(Screen):
             arrow(surf, (info.right - 12, info.centery), 10, "right")
 
         # 2) the cart ticket — red takes you to checkout
-        ticket = pygame.Rect(36, info.bottom + 14, t.w - 72, 60)
+        ticket = pygame.Rect(36, info.bottom + 12, t.w - 72, 56)
         count = self.app.cart_count()
         if count:
             t.go_ticket(surf, ticket, "سبد خرید و پرداخت", "md",
@@ -383,7 +389,7 @@ class GridScreen(Screen):
         else:
             t.go_ticket(surf, ticket, "سبد خرید خالیه", "md", disabled=True)
             foot = "اول یه کالا انتخاب کن"
-        foot_y = ticket.bottom + 20
+        foot_y = t.h - 34              # hints sit right above the frame
         t.kicker(surf, foot, {"midright": (t.w - 36, foot_y)},
                  color=K["alt_ink"], size="xs", marker=K["danger"], round_marker=True)
         hint = "انصراف: برداشتن آخری" if count else "انصراف: برگشت"
@@ -496,7 +502,7 @@ class MethodScreen(Screen):
         t.stage(surf)
         cx = t.w // 2
         t.title_box(surf, "روش پرداخت", {"midtop": (cx, 22)}, "md")
-        geo = slot_geometry(t)
+        geo = slot_geometry(t, top=84, card_h=150, gap_y=20)
         for m in ("qr", "card"):
             rect, side = geo[self.SLOT_OF[m]]
             rect = rect.inflate(0, 40).move(0, 30)

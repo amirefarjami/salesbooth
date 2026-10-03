@@ -11,6 +11,14 @@ from core.models import Product
 from kiosk.theme import K, RADIUS_SM, W, burst, plate, selected_card
 
 
+NAME_H = 26          # strip under the photo for the product name
+
+
+def photo_size(card: pygame.Rect) -> tuple[int, int]:
+    """Largest picture that fits a card's photo window (see ProductCard)."""
+    return card.w - 24, card.h - 22 - NAME_H - 10
+
+
 def price_fa(amount: int) -> str:
     """150000 -> '۱۵۰,۰۰۰' (Persian digits; the brand font has no '٬')."""
     return fa_digits(f"{int(amount):,}")
@@ -58,8 +66,8 @@ class ProductCard:
             plate(surf, r, K["paper"], shadow=4 - sink)
 
         # photo window (ink frame) -------------------------------------
-        name_h = 38
-        img_rect = pygame.Rect(r.x + 10, r.y + 22, r.w - 20, r.h - 22 - name_h - 8)
+        name_h = NAME_H
+        img_rect = pygame.Rect(r.x + 10, r.y + 22, r.w - 20, r.h - 22 - name_h - 6)
         pygame.draw.rect(surf, K["paper_2"] if not self.selected else K["paper"], img_rect,
                          border_radius=6)
         if self.image is not None:
@@ -74,9 +82,10 @@ class ProductCard:
         pygame.draw.rect(surf, K["ink"], img_rect, 2, border_radius=6)
 
         # name ---------------------------------------------------------
-        name = t.fit_text(self.product.name, r.w - 24, ("xs",),
-                          K["muted"] if self.sold_out else K["ink"], "display")
-        surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 3)))
+        # small body font so the photo gets the room
+        name = t.fit_text(self.product.name, r.w - 20, ("xs",),
+                          K["muted"] if self.sold_out else K["ink"])
+        surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 2)))
 
         # price: sticker on the top tab (right corner) -----------------
         if self.sold_out:
