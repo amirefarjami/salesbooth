@@ -497,21 +497,17 @@ class GridScreen(Screen):
         if count:
             t.go_ticket(surf, ticket, "سبد خرید و پرداخت", "md",
                         pressed=_press(self.t_ms, 1600))
-            foot = f"{fa_digits(count)} کالا  •  {price_fa(self.app.cart_total())} تومان"
         else:
             t.go_ticket(surf, ticket, "سبد خرید خالیه", "md", disabled=True)
-            foot = "اول یه کالا انتخاب کن"
         foot_y = ticket.bottom + L.HINT_H // 2 - 4   # hints just above the frame
-        t.kicker(surf, foot, {"midright": (t.w - 36, foot_y)},
-                 color=K["alt_ink"], size="xs", marker=K["danger"], round_marker=True)
-        hint = "انصراف: برداشتن آخری" if count else "انصراف: برگشت"
+        hint = "انصراف: تصحیح" if count else "انصراف: برگشت"
         h = t.text(hint, "xs", K["alt_ink"], bold=False)
-        surf.blit(h, h.get_rect(midleft=(36, foot_y)))
-        # the cancel key itself: yellow round button with an ink rim
-        bx = 36 + h.get_width() + 16
-        pygame.draw.circle(surf, K["ink"], (bx + 2, foot_y + 2), 13)
-        pygame.draw.circle(surf, K["hi"], (bx, foot_y), 12)
-        pygame.draw.circle(surf, K["ink"], (bx, foot_y), 12, 3)
+        # the cancel key itself: yellow round button with an ink rim, left of the label
+        bx, br = 36 + 12, 12
+        surf.blit(h, h.get_rect(midleft=(bx + br + 12, foot_y)))
+        pygame.draw.circle(surf, K["ink"], (bx + 2, foot_y + 2), br + 1)
+        pygame.draw.circle(surf, K["hi"], (bx, foot_y), br)
+        pygame.draw.circle(surf, K["ink"], (bx, foot_y), br, 3)
 
 
 # ---------------------------------------------------------------------------

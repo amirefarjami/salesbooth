@@ -287,7 +287,7 @@ PREVIEW_STEPS = [
      "desc": "۶ کالا، ۱/۳/۵ دکمه‌های چپ، ۲/۴/۶ دکمه‌های راست"},
     {"src": "/admin/preview-img/3-grid-cart.png", "alt": "3-grid-cart",
      "title": "افزودن به سبد",
-     "desc": "دکمه‌ی کنار کالا = +۱ به سبد و نمایش جزئیات؛ انصراف = برداشتن آخری"},
+     "desc": "دکمه‌ی کنار کالا = +۱ به سبد؛ کادر سفید = جمع کل و تعداد کالا"},
     {"src": "/admin/preview-img/4-cart.png", "alt": "4-cart",
      "title": "سبد خرید",
      "desc": "فهرست و جمع کل؛ قرمز = انتخاب روش پرداخت"},
@@ -366,7 +366,10 @@ def api_open_orders(booth: Booth = Depends(require_login)):
     return JSONResponse({
         "orders": out,
         "today": {"orders": today["orders"], "revenue": today["revenue"]},
-    })# ---------------------------------------------------------------- booth control
+    })
+
+
+# ---------------------------------------------------------------- booth control
 
 class MediaError(Exception):
     """Upload refused; the message is shown on the booth page."""
@@ -567,9 +570,10 @@ def _save_image(upload: UploadFile) -> str | None:
         img.thumbnail((_IMG_MAX_SIDE, _IMG_MAX_SIDE))
     except Exception:
         return None                                  # not an image Pillow can read
-    PRODUCT_IMG_DIR.mkdir(parents=True, exist_ok=True)
     rel = f"img/products/{uuid.uuid4().hex[:12]}.jpg"
-    img.save(DATA_DIR / rel, "JPEG", quality=88)
+    dest = DATA_DIR / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)   # same dir the panel serves from
+    img.save(dest, "JPEG", quality=88)
     return rel
 
 
