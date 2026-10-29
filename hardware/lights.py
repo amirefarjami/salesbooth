@@ -44,6 +44,7 @@ class BoothLights:
         self.enabled = bool(getattr(config, "lights_enabled", True))
         self.dim = float(getattr(config, "booth_light_dim", 0.15))
         self.shop_level = float(getattr(config, "booth_light_level", 0.85))
+        self.steady = bool(getattr(config, "lights_steady", False))
         self.mode = "attract"
         self.scene_t = 0.0                   # seconds since the scene began
         self.effect: str | None = None
@@ -86,7 +87,7 @@ class BoothLights:
     # --- scenes ---
 
     def _scene(self, mode: str, t: float) -> tuple[float, float]:
-        if mode in ("attract", "paywait", "shop"):
+        if self.steady and mode in ("attract", "paywait", "shop"):
             return self.shop_level, 0.0       # steady main light, red off
         if mode == "attract":
             main = 0.8 + 0.2 * math.cos(2 * math.pi * t / 4.0)     # 60–100 %, 4 s
@@ -144,9 +145,12 @@ class BoothLights:
         self.calling = self.mode == "attract" and 0 <= ph < 1.2
         self.main = max(0.0, min(1.0, main))
         self.red = max(0.0, min(1.0, red))
-        if self._main_dev is not None:
+        if self._main_dev is not None and abs(getattr(self, "_last_dev_main", -1.0) - self.main) > 0.005:
             self._main_dev.value = self.main
+            self._last_dev_main = self.main
+        if self._red_dev is not None and abs(getattr(self, "_last_dev_red", -1.0) - self.red) > 0.005:
             self._red_dev.value = self.red
+            self._last_dev_red = self.red
 
     def cleanup(self) -> None:
         if self._main_dev is not None:
