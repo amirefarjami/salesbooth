@@ -1,12 +1,16 @@
-"""CHIZ Booth — showcase door lock (12V solenoid behind the glass, via relay).
+"""CHIZ Booth - showcase door lock (12V solenoid behind the glass).
 
-After a confirmed payment the kiosk unlocks the glass door for
-`door_open_s` seconds, then locks it again. On the Pi the relay is driven
-with gpiozero (works on Pi 3/4/5 through lgpio); anywhere else, or when
-the library is missing, a simulator keeps the same API and just logs.
-The door is always re-locked on shutdown so a crash never leaves it open.
+Idle: no current, bolt out = locked. unlock() energizes the coil. The coil
+is cut again as soon as the door sensor reports the door open, or after
+`door_wait_s` seconds if the door is never opened, so the bolt springs out
+and latches when the door is closed. Without GPIO a simulator logs instead.
 """
 from __future__ import annotations
+
+import threading
+import time
+
+_SENSOR = None      # set by hardware.door.DoorSensor
 
 
 class DoorLock:
@@ -14,7 +18,9 @@ class DoorLock:
         self.enabled = bool(getattr(config, "lock_enabled", True))
         self.pin = int(getattr(config, "lock_gpio", 17))
         self.active_high = bool(getattr(config, "lock_active_high", True))
+        self.wait_s = float(getattr(config, "door_wait_s", 15))
         self.is_open = False
+        self._gen = 0
         self._dev = None
         if self.enabled:
             try:
@@ -29,20 +35,37 @@ class DoorLock:
     def simulated(self) -> bool:
         return self._dev is None
 
+    def _coil(self, on: bool) -> None:
+        if self._dev is not None:
+            if on:
+                self._dev.on()
+            else:
+                self._dev.off()
+        elif self.enabled:
+            print("LOCK: coil", "ON" if on else "OFF")
+
     def unlock(self) -> None:
         self.is_open = True
-        if self._dev is not None:
-            self._dev.on()
-        elif self.enabled:
-            print("LOCK: open")
+        self._gen += 1
+        self._coil(True)
+        threading.Thread(target=self._watch, args=(self._gen,), daemon=True).start()
+
+    def _watch(self, gen: int) -> None:
+        t0 = time.monotonic()
+        while gen == self._gen:
+            s = _SENSOR
+            if s is not None and getattr(s, "enabled", False) and s.is_open:
+                break                                   # door opened: cut current now
+            if time.monotonic() - t0 >= self.wait_s:
+                break                                   # never opened: lock again
+            time.sleep(0.02)
+        if gen == self._gen:
+            self._coil(False)
 
     def lock(self) -> None:
-        was_open = self.is_open
+        self._gen += 1
         self.is_open = False
-        if self._dev is not None:
-            self._dev.off()
-        elif self.enabled and was_open:
-            print("LOCK: closed")
+        self._coil(False)
 
     def cleanup(self) -> None:
         self.lock()

@@ -144,7 +144,7 @@ class KeyboardInput:
             if ev.type == pygame.QUIT:
                 self.quit_requested = True
             elif ev.type == pygame.KEYDOWN:
-                if ev.key == pygame.K_q and ev.mod & pygame.KMOD_CTRL:
+                if (ev.key == pygame.K_q and ev.mod & pygame.KMOD_CTRL) or (ev.key == pygame.K_F4 and ev.mod & pygame.KMOD_ALT):
                     self.quit_requested = True
                     continue
                 act = self.action_map.get(ev.key)

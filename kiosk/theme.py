@@ -285,9 +285,14 @@ class Theme:
         cache = self.__dict__.setdefault("_glyph_ok", {})
 
         def raw(ch: str) -> bytes:
-            g = font.render(ch, False, (0, 0, 0))
-            return pygame.image.tobytes(g, "RGB") if hasattr(pygame.image, "tobytes") \
-                else pygame.image.tostring(g, "RGB")
+            try:
+                g = font.render(ch, False, (0, 0, 0))
+                if g.get_width() == 0 or g.get_height() == 0:
+                    return b"zero_width"
+                return pygame.image.tobytes(g, "RGB") if hasattr(pygame.image, "tobytes") \
+                    else pygame.image.tostring(g, "RGB")
+            except pygame.error:
+                return b"error"
         fid = id(font)
         notdef = cache.get((fid, "\uffff"))
         if notdef is None:

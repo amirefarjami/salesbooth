@@ -1,0 +1,23 @@
+/home/amir/salesbooth/kiosk/app.py:46: RuntimeWarning: Requested window was forcibly resized by the OS.
+	Requested window size: (480, 800)
+	New window size: (480, 746)
+  self._display = pygame.display.set_mode(size, flags)
+Fatal Python error: Bus error
+
+Thread 0x626753e0 (most recent call first):
+  File "/home/amir/salesbooth/.venv/lib/python3.13/site-packages/lgpio.py", line 542 in run
+  File "/usr/lib/python3.13/threading.py", line 1043 in _bootstrap_inner
+  File "/usr/lib/python3.13/threading.py", line 1014 in _bootstrap
+
+Current thread 0x76f36660 (most recent call first):
+  File "/home/amir/salesbooth/kiosk/theme.py", line 407 in image
+  File "/home/amir/salesbooth/kiosk/screens.py", line 154 in _draw_brand
+  File "/home/amir/salesbooth/kiosk/screens.py", line 145 in draw
+  File "/home/amir/salesbooth/kiosk/app.py", line 209 in step
+  File "/home/amir/salesbooth/kiosk/app.py", line 220 in run
+  File "/home/amir/salesbooth/kiosk/app.py", line 252 in main
+  File "/home/amir/salesbooth/kiosk/app.py", line 259 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 198 in _run_module_as_main
+
+Extension modules: pygame.base, pygame.constants, pygame.rwobject, pygame.rect, pygame.bufferproxy, pygame.math, pygame.surflock, pygame.surface, pygame.window, pygame.display, pygame.draw, pygame.joystick, pygame.event, pygame.imageext, pygame.image, pygame.key, pygame.mouse, pygame.pixelcopy, pygame.mask, pygame.time, pygame.transform, pygame.font, pygame.mixer_music, pygame.mixer, pygame.scrap, pygame.system, pygame._freetype, _lgpio (total: 28)

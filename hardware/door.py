@@ -16,6 +16,8 @@ class DoorSensor:
         self.open_when_high = bool(getattr(config, "door_open_when_high", True))
         self._dev = None
         self._sim_open = False
+        from hardware import lock as _lock_mod
+        _lock_mod._SENSOR = self
         if self.enabled:
             try:
                 from gpiozero import DigitalInputDevice  # type: ignore
@@ -32,7 +34,7 @@ class DoorSensor:
     def is_open(self) -> bool:
         if self._dev is None:
             return self._sim_open
-        high = bool(self._dev.value)
+        high = not bool(self._dev.value)   # pull_up: value==1 means pin LOW
         return high if self.open_when_high else not high
 
     def toggle_sim(self) -> None:

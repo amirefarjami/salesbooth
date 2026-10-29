@@ -1,0 +1,98 @@
+# CHIZ Booth — config file (docs/setup-pi.md explains every part).
+# Copy to booth.toml and edit. Every key is optional; env vars CHIZ_* win.
+# On the Pi kiosk, set  fullscreen = true .
+
+[booth]
+screen_w = 480
+screen_h = 800
+fullscreen = true
+screen_rotate = 0            # 90/270 if the panel is mounted landscape (800x480)
+fps = 60
+scanlines = false        # flat «کمیک قورمه» look
+scanline_strength = 32
+
+attract_timeout_s = 60
+attract_hold_s = 120         # after a button press the how-to page stays 2 min before the posters
+
+sound = true
+sfx_volume = 0.8
+
+led_count = 8
+led_enabled = true
+led_gpio = 12
+led_brightness = 160
+
+admin_host = "0.0.0.0"
+admin_port = 8000
+admin_pin = "1390"
+
+hostname = "chiz"
+currency = "تومان"
+
+payment_methods = ["qr", "card"]   # what the buyer can pick (button 1 / 2)
+pos_driver = "sim"           # card reader link: "sim" until the PSP driver exists (docs/card-reader.md)
+pos_sim_approve_s = 5        # simulator: the «swipe» succeeds after N s (0 = never)
+payment_provider = "manual"   # "free" = every method auto-approves (testing)
+zarinpal_merchant_id = ""
+zarinpal_sandbox = true
+payment_poll_seconds = 3.0
+payment_timeout_s = 180
+
+order_ttl_minutes = 30
+
+# showcase door: solenoid lock via relay + reed-switch door sensor.
+# After payment the lock is released for the operator; the sensor starts
+# the countdown when the door opens; closing the door ends the hand-over.
+lock_enabled = true
+lock_gpio = 23
+lock_active_high = false    # module is active-LOW: pin LOW = current flows
+lights_active_high = false   # main + warning light modules: active-LOW
+door_open_s = 20             # countdown once the door is open, for 1 item
+door_extra_per_item_s = 5    # + 5 s for every extra item (2 items = 25 s)
+door_warn_s = 5              # last seconds: beep-beep, booth dims, red lights on
+door_wait_s = 15            # unlocked but never opened: lock again
+
+door_sensor_enabled = true
+door_sensor_gpio = 18
+door_open_when_high = true   # reed closed (door shut) pulls the pin low
+
+# booth lighting on two MOSFETs: 1 = main light (PWM), 2 = red warning lights
+lights_enabled = true
+booth_light_gpio = 17
+warn_light_gpio = 27
+booth_light_dim = 0.15       # main light level during the warning
+booth_light_level = 0.85     # while shopping (the add-to-cart blip goes to 100 %)
+
+# lamp inside the red confirm button (the only lit button)
+red_light_enabled = false
+red_light_gpio = 24
+
+# The 8 panel buttons. On the booth they go through a PCF8574 I2C module
+# (P0..P7, docs/wiring.md). The keyboard keymap below always works as well
+# (laptop simulator, maintenance keyboard, or a USB encoder instead).
+buttons_source = "pcf8574"   # "pcf8574" | "keyboard"
+i2c_bus = 1
+pcf8574_address = 0x20       # see it with:  i2cdetect -y 1   (0x20-0x27, or 0x38-0x3F for PCF8574A)
+
+[booth.pcf8574_pins]         # which P-pin each button is wired to
+slot1 = 1
+slot2 = 4
+slot3 = 2
+slot4 = 5
+slot5 = 3
+slot6 = 6
+confirm = 7
+cancel = 0
+[booth.keymap]
+# Keyboard / USB encoder: key names ("1", "return", "f5"), gamepad
+# buttons ("joy0"…) or raw key codes. slot1..slot6 beside the cards — 1, 3, 5
+# on the LEFT of the screen (top to bottom), 2, 4, 6 on the RIGHT.
+slot1 = "1"
+slot2 = "2"
+slot3 = "3"
+slot4 = "4"
+slot5 = "5"
+slot6 = "6"
+confirm = "return"   # big red button (lit)
+cancel = "escape"    # «انصراف»
+door_sim = "d"       # laptop only: open/close the showcase door

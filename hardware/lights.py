@@ -58,9 +58,11 @@ class BoothLights:
                 from gpiozero import PWMOutputDevice  # type: ignore
 
                 self._main_dev = PWMOutputDevice(int(getattr(config, "booth_light_gpio", 12)),
-                                                 initial_value=1.0, frequency=500)
+                                                 initial_value=1.0, frequency=500,
+                                                 active_high=bool(getattr(config, "lights_active_high", True)))
                 self._red_dev = PWMOutputDevice(int(getattr(config, "warn_light_gpio", 13)),
-                                                initial_value=0.0, frequency=500)
+                                                initial_value=0.0, frequency=500,
+                                                active_high=bool(getattr(config, "lights_active_high", True)))
             except Exception:
                 self._main_dev = self._red_dev = None
 
@@ -84,6 +86,8 @@ class BoothLights:
     # --- scenes ---
 
     def _scene(self, mode: str, t: float) -> tuple[float, float]:
+        if mode in ("attract", "paywait", "shop"):
+            return self.shop_level, 0.0       # steady main light, red off
         if mode == "attract":
             main = 0.8 + 0.2 * math.cos(2 * math.pi * t / 4.0)     # 60–100 %, 4 s
             ph = t % ATTRACT_PERIOD - ATTRACT_CALL_AT

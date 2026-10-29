@@ -240,6 +240,11 @@ class KioskApp:
         self.sounds.shutdown()
         self.booth.close()
         pygame.quit()
+        try:
+            from hardware.safe_off import drive_off
+            drive_off(self.cfg)      # lock + lights OFF after the pins are released
+        except Exception:
+            pass
 
 
 def main() -> int:
