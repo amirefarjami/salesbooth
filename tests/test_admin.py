@@ -171,3 +171,27 @@ def test_real_connection_survives_thread_pool(tmp_path, monkeypatch):
             for path in ("/admin", "/admin/products", "/admin/orders",
                          "/admin/reports", "/admin/api/open-orders"):
                 assert c.get(path).status_code == 200, path
+
+
+def test_login_rate_limiting(client):
+    _state["failed_attempts"].clear()
+    for _ in range(5):
+        r = client.post("/admin/login", data={"pin": "wrong"})
+        assert "PIN اشتباه است" in r.text
+    # 6th attempt should be blocked
+    r = client.post("/admin/login", data={"pin": "wrong"})
+    assert "بیش از حد" in r.text or "صبر کنید" in r.text
+    _state["failed_attempts"].clear()
+
+
+def test_open_orders_includes_today_stats(client):
+    _login(client)
+    booth = _state["booth"]
+    p = booth.products.create("تست زنده", 5000, stock=5)
+    owi = booth.orders.create(p.id, qty=2)
+    booth.orders.mark_paid(owi.order.id, provider="manual")
+    data = client.get("/admin/api/open-orders").json()
+    assert "today" in data
+    assert data["today"]["orders"] >= 1
+    assert data["today"]["revenue"] >= 10000
+

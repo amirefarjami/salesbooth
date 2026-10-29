@@ -54,7 +54,7 @@ def _jday(v) -> str:
 templates.env.filters["jday"] = _jday
 templates.env.filters["jalali"] = lambda v: fa_digits(jalali_date_time(v))
 
-_state: dict = {"booth": None, "tokens": set()}
+_state: dict = {"booth": None, "tokens": set(), "failed_attempts": {}}
 
 
 def get_booth():
@@ -105,9 +105,19 @@ def login_form(request: Request):
 
 @app.post("/admin/login")
 def login(request: Request, pin: str = Form(""), booth: Booth = Depends(get_booth)):
+    import time
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    fails, last_fail = _state.get("failed_attempts", {}).get(client_ip, (0, 0))
+    if fails >= 5 and now - last_fail < 30:
+        remain = int(30 - (now - last_fail))
+        return templates.TemplateResponse(request, "login.html",
+                                          {"error": f"تلاش‌های ناموفق بیش از حد؛ {remain} ثانیه صبر کنید"})
     if not _check_pin(pin, booth):
+        _state.setdefault("failed_attempts", {})[client_ip] = (fails + 1, now)
         return templates.TemplateResponse(request, "login.html",
                                           {"error": "PIN اشتباه است"})
+    _state.setdefault("failed_attempts", {}).pop(client_ip, None)
     token = secrets.token_urlsafe(24)
     _state["tokens"].add(token)
     resp = RedirectResponse(url="/admin", status_code=303)
@@ -177,7 +187,7 @@ def products_update(
 @app.post("/admin/products/{pid}/stock")
 def stock_delta(pid: int, delta: int = Form(...), booth: Booth = Depends(require_login)):
     booth.products.adjust_stock(pid, delta)
-    return RedirectResponse(request.url.path if False else "/admin/products", status_code=303)
+    return RedirectResponse(url="/admin/products", status_code=303)
 
 
 @app.post("/admin/products/{pid}/delete")
@@ -236,15 +246,16 @@ def reports_csv(days: int = 30, booth: Booth = Depends(require_login)):
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["id", "code", "status", "total_toman", "provider",
-                     "provider_ref", "created_at", "paid_at", "items"])
+                     "provider_ref", "created_at", "created_at_jalali", "paid_at", "items"])
     for r in booth.stats.rows_for_csv(days):
         writer.writerow([r["id"], r["code"], r["status"], r["total_toman"],
                          r["provider"], r["provider_ref"], r["created_at"],
+                         jalali_date_time(r["created_at"]),
                          r["paid_at"], r["items"]])
     # BOM so Excel opens the Persian text as UTF-8 instead of garbage
     return PlainTextResponse(
         "\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=chiz-sales.csv"})
+        headers={"Content-Disposition": f"attachment; filename=chiz-sales-{days}days.csv"})
 
 
 PREVIEW_STEPS = [
@@ -328,6 +339,7 @@ def product_image(rel_path: str):
 @app.get("/admin/api/open-orders")
 def api_open_orders(booth: Booth = Depends(require_login)):
     """Polled by the dashboard for live seller view."""
+    booth.orders.expire_stale(booth.config.order_ttl_minutes)
     out = []
     for owi in booth.orders.list_open():
         out.append({
@@ -336,7 +348,11 @@ def api_open_orders(booth: Booth = Depends(require_login)):
             "items": [{"name": i.name, "qty": i.qty} for i in owi.items],
             "created_at": owi.order.created_at,
         })
-    return JSONResponse({"orders": out})
+    today = booth.stats.today()
+    return JSONResponse({
+        "orders": out,
+        "today": {"orders": today["orders"], "revenue": today["revenue"]},
+    })
 
 
 # ---------------------------------------------------------------- images
