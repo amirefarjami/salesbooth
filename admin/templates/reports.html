@@ -9,7 +9,7 @@
     {% endfor %}
   </div>
   <div class="actions">
-    <a class="btn grow" href="/admin/reports/export.csv?days=30">⬇️ فایل اکسل (CSV) — ۳۰ روز</a>
+    <a class="btn grow" href="/admin/reports/export.csv?days={{ days }}">⬇️ فایل اکسل (CSV) — {{ days|fa }} روز</a>
   </div>
   <p class="muted" style="margin-top:8px">فقط سفارش‌های پرداخت‌شده و تحویل‌شده حساب می‌شوند.</p>
 </div>

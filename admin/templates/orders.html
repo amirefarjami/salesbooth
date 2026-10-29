@@ -4,12 +4,30 @@
              'canceled':('لغو شده','bad'),'expired':('منقضی','')} %}
 {% set pay = {'zarinpal':'کیوآر','card':'کارتخوان','manual':'تأیید دستی','free':'آزمایشی'} %}
 {% block body %}
-<h2 style="color:#fff; margin-top:6px">۵۰ سفارش آخر</h2>
-{% for o in orders %}
 <div class="card" style="padding:12px 14px">
+  <div class="row" style="justify-content:space-between; flex-wrap:wrap; margin-bottom:8px">
+    <h2>سفارش‌ها</h2>
+    <span class="muted" id="order-count">{{ orders|length|fa }} سفارش</span>
+  </div>
+  <input type="text" id="order-search" placeholder="🔍 جستجو بر اساس کد سفارش یا نام محصول…" 
+         style="margin-bottom:10px" oninput="filterOrders()">
+  <div class="actions" style="margin-top:6px">
+    <button type="button" class="btn primary grow filter-btn" onclick="setStatusFilter('all', this)">همه</button>
+    <button type="button" class="btn grow filter-btn" onclick="setStatusFilter('paid', this)">پرداخت‌شده</button>
+    <button type="button" class="btn grow filter-btn" onclick="setStatusFilter('delivered', this)">تحویل شده</button>
+    <button type="button" class="btn grow filter-btn" onclick="setStatusFilter('pending', this)">در انتظار</button>
+    <button type="button" class="btn grow filter-btn" onclick="setStatusFilter('canceled', this)">لغو شده</button>
+  </div>
+</div>
+
+<div id="orders-container">
+{% for o in orders %}
+<div class="card order-card" style="padding:12px 14px"
+     data-status="{{ o.order.status }}"
+     data-search="{{ o.order.code }} {% for i in o.items %}{{ i.name }} {% endfor %}">
   <div class="row" style="justify-content:space-between; flex-wrap:wrap">
     <b style="font-size:20px">کد {{ o.order.code|fa }}</b>
-    <span class="pill {{ st[o.order.status][1] }}">{{ st[o.order.status][0] }}</span>
+    <span class="pill {{ st.get(o.order.status, ('نامشخص',''))[1] }}">{{ st.get(o.order.status, (o.order.status,''))[0] }}</span>
   </div>
   <div>{% for i in o.items %}{{ i.name }} × {{ i.qty|fa }}{% if not loop.last %}، {% endif %}{% endfor %}</div>
   <div class="row" style="justify-content:space-between; flex-wrap:wrap; margin-top:4px">
@@ -20,4 +38,36 @@
 {% else %}
 <div class="card"><p class="muted">هنوز سفارشی ثبت نشده.</p></div>
 {% endfor %}
+</div>
+
+<script>
+let currentStatus = 'all';
+
+function setStatusFilter(status, btn) {
+  currentStatus = status;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('primary'));
+  btn.classList.add('primary');
+  filterOrders();
+}
+
+function filterOrders() {
+  const q = (document.getElementById('order-search').value || '').trim().toLowerCase();
+  const cards = document.querySelectorAll('.order-card');
+  let visible = 0;
+  cards.forEach(card => {
+    const status = card.getAttribute('data-status');
+    const searchTxt = (card.getAttribute('data-search') || '').toLowerCase();
+    const matchesStatus = (currentStatus === 'all') || (status === currentStatus);
+    const matchesQuery = !q || searchTxt.includes(q);
+    if (matchesStatus && matchesQuery) {
+      card.style.display = '';
+      visible++;
+    } else {
+      card.style.display = 'none';
+    }
+  });
+  const countEl = document.getElementById('order-count');
+  if (countEl) countEl.textContent = (visible.toLocaleString('fa-IR')) + ' سفارش';
+}
+</script>
 {% endblock %}
