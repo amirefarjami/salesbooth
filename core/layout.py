@@ -14,10 +14,10 @@ COLS = 2
 ROWS = 3
 SLOTS = COLS * ROWS
 
-MARGIN_X = 20        # stage margin left/right of the grid
-GAP_X = 16           # between the two columns
+MARGIN_X = 28        # stage margin left/right: room for the selected ring
+GAP_X = 14           # between the two columns
 GAP_Y = 12           # between rows
-TOP = 24             # grid top: just inside the red frame
+TOP = 28             # grid top: the selected ring stays inside the frame
 
 PAD = 10             # paper margin inside a card (photo is inset by this)
 TAB = 22             # top tab of the card: the price sticker

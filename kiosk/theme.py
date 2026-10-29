@@ -178,33 +178,42 @@ def arrow(surf, tip, size: int, direction: str = "left", color=K["ink"]) -> None
 
 
 def ring_progress(surf, center, radius: int, width: int, frac: float,
-                  color, track=K["paper_2"]) -> None:
+                  color, track=K["paper_2"], ink_w: int = 5) -> None:
     """Countdown ring: paper track + coloured arc (frac 1 = full).
 
     RTL: the coloured part runs CLOCKWISE from 12 o'clock, so as time runs
     out the empty part opens at the top and grows from the LEFT,
-    counter-clockwise."""
-    rect = pygame.Rect(0, 0, radius * 2, radius * 2)
-    rect.center = center
-    pygame.draw.circle(surf, track, center, radius, width)
+    counter-clockwise.
+
+    The ring is drawn on its own square surface, so its width and height are
+    literally the same number of pixels — a circle, never an oval — and the
+    thick ink edges (`ink_w`) can never be clipped by the plate behind it.
+    """
+    radius = int(radius)
+    width = max(2, int(width))
+    ink_w = max(2, int(ink_w))
+    pad = ink_w // 2 + 1
+    size = radius * 2 + pad * 2
+    ring = pygame.Surface((size, size), pygame.SRCALPHA)
+    c = (size // 2, size // 2)
+
+    pygame.draw.circle(ring, track, c, radius, width)
     frac = max(0.0, min(1.0, frac))
     if frac > 0:
-        start = math.pi / 2
-        end = start - frac * 2 * math.pi        # clockwise (screen y is flipped below)
-        # draw as thick polyline of small arcs (pygame arc leaves gaps)
-        steps = max(2, int(90 * frac))
-        for i in range(steps):
-            a0 = start + (end - start) * i / steps
-            a1 = start + (end - start) * (i + 1) / steps
-            pts = []
-            for a in (a0, a1):
-                pts.append((center[0] + radius * math.cos(a), center[1] - radius * math.sin(a)))
-            for a in (a1, a0):
-                pts.append((center[0] + (radius - width) * math.cos(a),
-                            center[1] - (radius - width) * math.sin(a)))
-            pygame.draw.polygon(surf, color, pts)
-    pygame.draw.circle(surf, K["ink"], center, radius + 1, 2)
-    pygame.draw.circle(surf, K["ink"], center, radius - width, 2)
+        # the arc is swept by round dots on the band's centre line: exactly
+        # circular, with no polyline chords that could flatten the edges
+        mid_r = radius - width / 2.0
+        steps = max(6, int(240 * frac))
+        for i in range(steps + 1):
+            a = math.pi / 2 - 2 * math.pi * frac * (i / steps)
+            pygame.draw.circle(
+                ring, color,
+                (int(round(c[0] + mid_r * math.cos(a))),
+                 int(round(c[1] - mid_r * math.sin(a)))),
+                max(1, width // 2))
+    pygame.draw.circle(ring, K["ink"], c, radius + ink_w // 2, ink_w)
+    pygame.draw.circle(ring, K["ink"], c, radius - width, ink_w)   # flush: no gap
+    surf.blit(ring, ring.get_rect(center=(int(center[0]), int(center[1]))))
 
 
 # ---------------------------------------------------------------------------

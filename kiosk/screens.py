@@ -473,15 +473,17 @@ class GridScreen(Screen):
             plate(surf, info, K["hi"], shadow=OFF_SM)
             s = t.fit_text(self.toast, info.w - 20, ("sm", "xs"))
             surf.blit(s, s.get_rect(center=info.center))
-        elif self.focus is not None:
-            card = self.cards[self.focus]
-            p = card.product
+        elif self.focus is not None and self.app.cart_count():
+            # after a pick: the running total instead of the last product's
+            # details — how many items are in the cart and what they cost
+            count = self.app.cart_count()
             plate(surf, info, K["paper"], shadow=OFF_SM)
-            name = t.fit_text(p.name, 180, ("sm", "xs"), K["ink"], "display")
-            surf.blit(name, name.get_rect(midright=(info.right - 14, info.centery)))
-            det = t.text(f"{price_fa(p.price_toman)} تومان  •  موجودی {fa_digits(card.left)}",
-                         "xs", K["muted"])
-            surf.blit(det, det.get_rect(midleft=(info.left + 12, info.centery)))
+            amount = t.fit_text(f"{price_fa(self.app.cart_total())} تومان", 230,
+                                ("md", "sm", "xs"), K["ink"], "display")
+            surf.blit(amount, amount.get_rect(midleft=(info.left + 12, info.centery + 1)))
+            qty = t.fit_text(f"{fa_digits(count)} کالا", 96,
+                             ("sm", "xs"), K["danger"], "display")
+            surf.blit(qty, qty.get_rect(midright=(info.right - 14, info.centery + 1)))
         else:
             plate(surf, info, K["hi"] if self.nudge_ms else K["paper"], shadow=OFF_SM)
             s = t.fit_text("دکمه‌ی کنار هر کالا = بنداز تو سبد", info.w - 70, ("sm", "xs"))
@@ -505,6 +507,11 @@ class GridScreen(Screen):
         hint = "انصراف: برداشتن آخری" if count else "انصراف: برگشت"
         h = t.text(hint, "xs", K["alt_ink"], bold=False)
         surf.blit(h, h.get_rect(midleft=(36, foot_y)))
+        # the cancel key itself: yellow round button with an ink rim
+        bx = 36 + h.get_width() + 16
+        pygame.draw.circle(surf, K["ink"], (bx + 2, foot_y + 2), 13)
+        pygame.draw.circle(surf, K["hi"], (bx, foot_y), 12)
+        pygame.draw.circle(surf, K["ink"], (bx, foot_y), 12, 3)
 
 
 # ---------------------------------------------------------------------------

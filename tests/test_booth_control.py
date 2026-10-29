@@ -65,6 +65,17 @@ def test_photo_aspect_matches_the_card():
     assert layout.PRODUCT_PHOTO_ASPECT == pytest.approx(w / h)
 
 
+def test_selected_card_ring_stays_inside_the_page_frame():
+    """The yellow selection ring (7 px out + 2 px ink) must not paint over
+    the red frame of the stage or reach down into the action bar."""
+    inset = 19                      # the frame's ink covers 6..18 px
+    info_top = layout.grid_bottom(800) + layout.CARD_GAP
+    for x, y, w, h, _side in layout.slots(480, 800):
+        assert x - 9 >= inset and y - 9 >= inset
+        assert x + w + 9 <= 480 - inset and y + h + 9 <= 800 - inset
+        assert y + h + 9 < info_top
+
+
 # ------------------------------------------------------------------ kiosk
 
 @pytest.fixture()
