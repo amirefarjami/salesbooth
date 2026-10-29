@@ -21,9 +21,9 @@ seed:
 fonts:
 	.venv/bin/python scripts/fetch_fonts.py
 
-# Run the local admin panel (http://localhost:8000/admin)
+# Run the local admin panel (http://localhost:8001/admin)
 panel:
-	.venv/bin/python -m uvicorn admin.app:app --host 0.0.0.0 --port 8000
+	.venv/bin/python -m uvicorn admin.app:app --host 0.0.0.0 --port 8001
 
 # Field test mode for button wiring
 factory-test:
