@@ -4,13 +4,18 @@
 <div class="card">
   <h2>امروز</h2>
   <div class="tiles">
-    <div class="tile"><span class="muted">سفارش</span><b>{{ today.orders|fa }}</b></div>
-    <div class="tile"><span class="muted">فروش</span><b class="price">{{ today.revenue|toman }}</b></div>
+    <div class="tile"><span class="muted">سفارش</span><b id="today-orders">{{ today.orders|fa }}</b></div>
+    <div class="tile"><span class="muted">فروش</span><b class="price" id="today-rev">{{ today.revenue|toman }}</b></div>
   </div>
 </div>
 
 <div class="card">
-  <h2>سفارش‌های باز</h2>
+  <div class="row" style="justify-content:space-between; flex-wrap:wrap">
+    <h2>سفارش‌های باز</h2>
+    <button type="button" id="sound-btn" onclick="toggleSound()" class="btn" style="min-height:34px; padding:0 10px; font-size:13px">
+      🔔 صدای اعلان: غیرفعال
+    </button>
+  </div>
   <p class="muted">هر ۳ ثانیه خودکار به‌روز می‌شود.</p>
   <div id="open-orders"><p class="muted">در حال بارگذاری…</p></div>
 </div>
@@ -28,15 +33,86 @@
   {% else %}<p class="muted">همه‌ی موجودی‌ها خوب است ✅</p>{% endif %}
 </div>
 
+<div class="card flat" style="text-align:center; padding:10px 14px">
+  <a class="btn grow" href="/admin/preview" style="font-size:14px">📺 نمای شبیه‌ساز صفحه و دکمه‌های باجه</a>
+</div>
+
 <script>
 const fa = n => Number(n).toLocaleString('fa-IR');                 // 150000 → ۱۵۰٬۰۰۰
 const digits = s => String(s).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]); // codes: no grouping
+
+let knownOrders = new Map();
+let isFirstLoad = true;
+
+function updateSoundBtn() {
+  const btn = document.getElementById('sound-btn');
+  const on = localStorage.getItem('chiz_sound') === 'on';
+  btn.textContent = on ? '🔔 صدای اعلان: فعال' : '🔕 صدای اعلان: غیرفعال';
+  btn.style.background = on ? 'var(--hi)' : 'var(--paper)';
+}
+
+function toggleSound() {
+  const on = localStorage.getItem('chiz_sound') === 'on';
+  localStorage.setItem('chiz_sound', on ? 'off' : 'on');
+  updateSoundBtn();
+  if (!on) playChime('ping');
+}
+
+function playChime(kind) {
+  if (localStorage.getItem('chiz_sound') !== 'on') return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    if (kind === 'paid') {
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.14);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } else {
+      osc.frequency.setValueAtTime(880, now);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.start(now);
+      osc.stop(now + 0.28);
+    }
+  } catch(e) {}
+}
+
 async function refresh(){
   let r;
   try { r = await fetch('/admin/api/open-orders'); } catch(e) { return; }
   if (r.redirected || r.status === 401 || r.status === 303) { location.href = '/admin/login'; return; }
   if (!r.ok) return;
   const data = await r.json();
+
+  if (data.today) {
+    const elOrders = document.getElementById('today-orders');
+    const elRev = document.getElementById('today-rev');
+    if (elOrders) elOrders.textContent = digits(data.today.orders);
+    if (elRev) elRev.textContent = fa(data.today.revenue) + ' تومان';
+  }
+
+  // detect new orders or paid status for audio notification
+  const nextKnown = new Map();
+  for (const o of data.orders) {
+    nextKnown.set(o.id, o.status);
+    if (!isFirstLoad) {
+      if (!knownOrders.has(o.id)) {
+        playChime('ping');
+      } else if (knownOrders.get(o.id) === 'pending' && o.status === 'paid') {
+        playChime('paid');
+      }
+    }
+  }
+  knownOrders = nextKnown;
+  isFirstLoad = false;
+
   const el = document.getElementById('open-orders');
   if (!data.orders.length) { el.innerHTML = '<p class="muted">سفارش بازی نیست.</p>'; return; }
   el.innerHTML = data.orders.map(o => `
@@ -57,6 +133,8 @@ async function refresh(){
       </div>
     </div>`).join('');
 }
+
+updateSoundBtn();
 refresh(); setInterval(refresh, 3000);
 </script>
 {% endblock %}
