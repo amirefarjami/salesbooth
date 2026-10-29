@@ -153,15 +153,17 @@ class AttractScreen(Screen):
 
         rc = t.image("recycle.png", height=40)
         if rc is not None:
-            surf.blit(rc, (30, 28))
+            surf.blit(rc, rc.get_rect(midtop=(48, 24)))
+        skate = t.image("broken-skate.png", height=40)
+        if skate is not None:
+            surf.blit(skate, skate.get_rect(midtop=(48, 72)))
 
         bob = int(round(5 * math.sin(self.t_ms / 600)))
         logo = t.logo(210)
         if logo is not None:
             surf.blit(logo, logo.get_rect(center=(cx, 150 + bob)))
-        slogan = t.image("chiz-slogan.png", width=300)
-        if slogan is not None:
-            surf.blit(slogan, slogan.get_rect(midtop=(cx, 272)))
+        title = t.text("باجه فروش چیز", "lg", K["alt_ink"], "display")
+        surf.blit(title, title.get_rect(midtop=(cx, 272)))
 
         # how-to card (paper, kicker-rule heading, 3 numbered steps)
         card = pygame.Rect(36, 344, t.w - 72, 196)
@@ -350,10 +352,7 @@ class GridScreen(Screen):
         self._draw_action_bar(surf, t)
 
     def _draw_header(self, surf, t) -> None:
-        # just a small 24-hour clock, top-left; the rest of the top is cards
-        now = time.localtime()
-        clock = t.text(fa_digits(f"{now.tm_hour:02d}:{now.tm_min:02d}"), "sm", K["alt_ink"])
-        surf.blit(clock, clock.get_rect(topleft=(30, 18)))
+        pass
 
     def _draw_action_bar(self, surf, t) -> None:
         top = slot_geometry(t)[-1][0].bottom + 12
