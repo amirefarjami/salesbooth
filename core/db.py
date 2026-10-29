@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -55,7 +55,24 @@ CREATE TABLE IF NOT EXISTS events (
     detail     TEXT
 );
 
+CREATE TABLE IF NOT EXISTS media (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT NOT NULL CHECK (kind IN ('image','video')),
+    path        TEXT NOT NULL,                   -- relative to data/ (image file)
+    poster      TEXT,                            -- thumbnail / first frame
+    frames_dir  TEXT,                            -- video: dir of 0001.jpg …
+    fps         REAL NOT NULL DEFAULT 12,
+    frame_count INTEGER NOT NULL DEFAULT 0,
+    duration_s  INTEGER NOT NULL DEFAULT 8,      -- images; videos follow their own length
+    start_time  TEXT,                            -- 'HH:MM' window; empty = always
+    end_time    TEXT,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_orders_status   ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_media_sort      ON media(sort_order);
 CREATE INDEX IF NOT EXISTS idx_orders_created  ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_items_order     ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_events_kind     ON events(kind);

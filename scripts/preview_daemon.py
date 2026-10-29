@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LOG = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / ".freebuff" / "preview.log"
+PORT = sys.argv[2] if len(sys.argv) > 2 else "8000"
 
 
 def main() -> None:
@@ -37,7 +38,7 @@ def main() -> None:
         os.dup2(devnull, 0)
         python = str(ROOT / ".venv" / "bin" / "python")
         os.execv(python, [python, "-m", "uvicorn", "admin.app:app",
-                          "--host", "127.0.0.1", "--port", "8000"])
+                          "--host", "127.0.0.1", "--port", PORT])
         os._exit(127)
     # parent: wait for grandchild pid and print it
     os.close(w)

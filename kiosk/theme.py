@@ -58,6 +58,7 @@ K = {
     "stage_2":      _hex("2f4f9e"),
     "frame":        _hex("ec1f24"),   # the red rounded frame of the booth art
     "burst_rim":    _hex("f7931e"),   # orange inner rim of the price burst
+    "orange":       _hex("f7931e"),   # brand orange: «×n» in-cart badge
     "poster":       _hex("b0901f"),   # sand of the posters (slide letterbox)
 }
 

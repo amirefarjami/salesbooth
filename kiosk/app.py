@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -10,6 +11,7 @@ import pygame  # noqa: E402
 
 from core.booth import Booth  # noqa: E402
 from core.config import load_config  # noqa: E402
+from core.control import control_mtime, read_control  # noqa: E402
 from core.fonts import FontPack  # noqa: E402
 from core.orders import OrderError  # noqa: E402
 from core.payment import provider_for_method  # noqa: E402
@@ -66,6 +68,13 @@ class KioskApp:
         self.door = DoorSensor(self.cfg)
         self.red = ButtonLight(self.cfg)
         self.lights = BoothLights(self.cfg)
+
+        # power + light level from the seller's panel (data/control.json)
+        self.control = read_control()
+        self._control_stamp = control_mtime()
+        self._control_poll = 0.0
+        self._was_on = bool(self.control.get("booth_on", True))
+        self._apply_control()
 
         # the cart: {product_id: qty} + the order things were added in
         self.cart: dict[int, int] = {}
@@ -177,6 +186,47 @@ class KioskApp:
     def open_door(self, order_id: int, code: str) -> None:
         self._show(DoorScreen(self, order_id, code), "door")
 
+    # -- seller controls (panel) --------------------------------------
+
+    def _apply_control(self) -> None:
+        """Push brightness to every light source (0..100 % → 0..1)."""
+        level = max(0, min(100, int(self.control.get("brightness", 100)))) / 100.0
+        self.lights.master = level
+        self.led.master = level
+
+    def _poll_control(self) -> None:
+        """Re-read control.json when the panel changed it (cheap, ~2 / s)."""
+        now = time.monotonic()
+        if now - self._control_poll < 0.5:
+            return
+        self._control_poll = now
+        stamp = control_mtime()
+        if stamp and stamp != self._control_stamp:
+            self._control_stamp = stamp
+            self.control = read_control()
+            self._apply_control()
+
+    def _draw_standby(self, surf: pygame.Surface) -> None:
+        """Soft-off card: the booth is asleep, the panel can wake it."""
+        t = self.theme
+        surf.fill(K["stage"])
+        r = pygame.Rect(0, 0, t.w, t.h).inflate(-12, -12)
+        pygame.draw.rect(surf, K["ink"], r, 12, border_radius=26)
+        pygame.draw.rect(surf, K["danger_edge"], r.inflate(-4, -4), 8, border_radius=24)
+        cx = t.w // 2
+        logo = t.logo(120, alpha=90)
+        if logo is not None:
+            surf.blit(logo, logo.get_rect(center=(cx, 300)))
+        msg = t.text("باجه خوابه", "lg", K["paper_2"], "display")
+        surf.blit(msg, msg.get_rect(midtop=(cx, 386)))
+        sub = t.text("برای روشن کردن، از پنل فروشنده استفاده کنید", "xs", K["paper_2"])
+        surf.blit(sub, sub.get_rect(midtop=(cx, 446)))
+        lamp = pygame.Rect(0, 0, 30, 30)
+        lamp.center = (cx, 512)
+        pygame.draw.circle(surf, K["ink"], lamp.center, 15)
+        pygame.draw.circle(surf, K["danger_edge"], lamp.center, 12)
+        pygame.draw.circle(surf, K["danger"], lamp.center, 8)
+
     def _make_icon(self) -> pygame.Surface:
         s = pygame.Surface((32, 32))
         s.fill(K["alt"])
@@ -188,6 +238,26 @@ class KioskApp:
 
     def step(self, dt_ms: int, actions=()) -> None:
         """One frame: input → idle timeout → tick → LEDs → draw."""
+        self._poll_control()
+        if not self.control.get("booth_on", True):        # asleep: ignore input
+            if self._was_on:
+                self._was_on = False
+                self.cart_clear()
+                self.lock.lock()
+                self.led.off()
+                self._screens["grid"].reset()
+            self.lights.set("off")     # also when the kiosk boots already off
+            self.lights.tick(dt_ms)
+            self.red.set("off")
+            self.red.tick()
+            self._draw_standby(self.screen)
+            if self.theme.scanlines is not None and not self.headless:
+                self.screen.blit(self.theme.scanlines, (0, 0))
+            return
+        if not self._was_on:                             # woken up by the panel
+            self._was_on = True
+            self.go("attract")
+            self.sounds.play("boot")
         for act in actions:
             value = act.value if hasattr(act, "value") else str(act)
             if value == "door_sim":            # laptop: the "d" key is the door

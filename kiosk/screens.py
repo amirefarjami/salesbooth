@@ -17,12 +17,41 @@ import time
 
 import pygame
 
+from core import layout as L
 from core.config import DATA_DIR
 from core.fa import fa_digits
 from core.models import Product
 from hardware.input import slot_index
 from kiosk.theme import K, OFF_SM, arrow, marker_dot, plate, selected_card
 from kiosk.widgets import ProductCard, load_product_image, photo_size, price_fa, slot_tag
+
+# video frames live in data/media/…; only a handful are kept in memory
+_FRAME_CACHE: dict[str, pygame.Surface | None] = {}
+_FRAME_CACHE_MAX = 16
+
+
+def _video_frame(item, index: int) -> pygame.Surface | None:
+    """Frame N of an uploaded video (decoded to JPEGs on upload)."""
+    if not item.frames_dir or item.frame_count <= 0:
+        return None
+    n = index % item.frame_count + 1
+    path = DATA_DIR / item.frames_dir / f"{n:04d}.jpg"
+    key = str(path)
+    if key in _FRAME_CACHE:
+        return _FRAME_CACHE[key]
+    if len(_FRAME_CACHE) > _FRAME_CACHE_MAX:
+        _FRAME_CACHE.clear()
+    try:
+        surf = pygame.image.load(key)
+        try:
+            surf = surf.convert()
+        except pygame.error:
+            pass                       # headless render: no display format
+        _FRAME_CACHE[key] = surf
+        return surf
+    except (pygame.error, FileNotFoundError):
+        _FRAME_CACHE[key] = None
+        return None
 
 SLOTS = 6
 COLS = 2
@@ -69,16 +98,27 @@ def _press(t_ms: int, period: int = 1400) -> float:
     return max(0.0, 1.0 - abs(p - 0.08) / 0.08) if p < 0.16 else 0.0
 
 
-def slot_geometry(t, top: int = 40, card_h: int = 176, gap_y: int = 18,
-                  margin_x: int = 36, gap_x: int = 20):
+def slot_geometry(t, top: int | None = None, card_h: int | None = None,
+                  gap_y: int | None = None, margin_x: int = L.MARGIN_X,
+                  gap_x: int = L.GAP_X):
     """Card rect + side for slots 1..6: odd slots on the left column (next to
-    the left buttons), even slots on the right."""
+    the left buttons), even slots on the right.
+
+    With no arguments this is the product grid: the cards start just inside
+    the frame and are as tall as the space above the action bar allows
+    (core/layout.py). Other screens pass their own box."""
+    if top is None and card_h is None and gap_y is None:
+        return [(pygame.Rect(x, y, w, h), side)
+                for x, y, w, h, side in L.slots(t.w, t.h)]
+    top = L.TOP if top is None else top
+    card_h = L.card_h(t.h) if card_h is None else card_h
+    gap_y = L.GAP_Y if gap_y is None else gap_y
     card_w = (t.w - margin_x * 2 - gap_x) // COLS
     out = []
     for pos in range(SLOTS):
         row, col = divmod(pos, COLS)
         x = margin_x + col * (card_w + gap_x)
-        y = top + 12 + row * (card_h + gap_y)
+        y = top + row * (card_h + gap_y)
         out.append((pygame.Rect(x, y, card_w, card_h), "left" if col == 0 else "right"))
     return out
 
@@ -90,8 +130,8 @@ def slot_geometry(t, top: int = 40, card_h: int = 176, gap_y: int = 18,
 
 class AttractScreen(Screen):
     idle_timeout = False
-    # (slide, seconds): the brand slide stays longest
-    SLIDES = (("brand", 9), ("poster-1.jpg", 5), ("brand", 9), ("poster-2.jpg", 5))
+    BRAND_SECS = 9            # the how-to slide on each loop
+    POSTER_SECS = 5           # built-in posters (only when no uploads)
 
     def __init__(self, app) -> None:
         super().__init__(app)
@@ -99,6 +139,37 @@ class AttractScreen(Screen):
         self.slide_ms = 0
         self.slide = 0
         self.hold_ms = 0          # keep the how-to slide up (no screensaver)
+        self.playlist: list[dict] = []
+        self._build_playlist()
+
+    def _build_playlist(self) -> None:
+        """Brand slide, then the seller's screensaver items (or the posters).
+
+        Items come from the admin panel with their own time window, so the
+        list is rebuilt on every loop: a new upload shows up without a
+        kiosk restart."""
+        t = self.app.theme
+        slides: list[dict] = [{"kind": "brand", "secs": self.BRAND_SECS}]
+        try:
+            items = self.app.booth.media.list_active()
+        except Exception:
+            items = []
+        for m in items:
+            slides.append({"kind": m.kind, "secs": m.seconds, "item": m})
+        if not items:
+            for name in ("poster-1.jpg", "poster-2.jpg"):
+                if t.image(name) is not None:
+                    slides.append({"kind": "poster", "secs": self.POSTER_SECS,
+                                   "name": name})
+        self.playlist = slides
+        if self.slide >= len(slides):
+            self.slide = 0
+
+    @property
+    def SLIDES(self) -> list[tuple[str, float]]:
+        """Legacy view of the playlist: (name-or-kind, seconds)."""
+        return [((s.get("name") if s["kind"] == "poster" else s["kind"]), s["secs"])
+                for s in self.playlist]
 
     def _hold_howto(self) -> None:
         """Show the brand/how-to slide and keep it for attract_hold_s."""
@@ -122,14 +193,27 @@ class AttractScreen(Screen):
             self.hold_ms -= dt_ms
             return
         self.slide_ms += dt_ms
-        name, secs = self.SLIDES[self.slide]
-        if self.slide_ms >= secs * 1000:
+        if self.slide_ms >= self.playlist[self.slide]["secs"] * 1000:
             self.slide_ms = 0
-            self.slide = (self.slide + 1) % len(self.SLIDES)
-            # skip posters whose file is missing
-            if self.SLIDES[self.slide][0] != "brand" and \
-                    self.app.theme.image(self.SLIDES[self.slide][0]) is None:
+            nxt = self.slide + 1
+            if nxt >= len(self.playlist):     # new loop: re-read the panel
+                self._build_playlist()
+                nxt = 0
+            self.slide = nxt
+            if self.slide and not self._slide_ok(self.slide):
                 self.slide = 0
+
+    def _slide_ok(self, index: int) -> bool:
+        """A poster/upload whose file went missing falls back to the brand."""
+        s = self.playlist[index]
+        if s["kind"] == "poster":
+            return self.app.theme.image(s["name"]) is not None
+        if s["kind"] == "image":
+            return (DATA_DIR / s["item"].path).is_file()
+        if s["kind"] == "video":
+            item = s["item"]
+            return bool(item.frames_dir) and (DATA_DIR / item.frames_dir).is_dir()
+        return True
 
     def handle(self, action: str) -> None:
         if action == "confirm":               # only the red button starts
@@ -140,11 +224,14 @@ class AttractScreen(Screen):
             self._hold_howto()
 
     def draw(self, surf: pygame.Surface) -> None:
-        name = self.SLIDES[self.slide][0]
-        if name == "brand":
+        slide = self.playlist[self.slide]
+        kind = slide["kind"]
+        if kind == "brand":
             self._draw_brand(surf)
+        elif kind == "poster":
+            self._draw_poster(surf, slide["name"])
         else:
-            self._draw_poster(surf, name)
+            self._draw_slide(surf, slide)
 
     def _draw_brand(self, surf) -> None:
         t = self.app.theme
@@ -154,9 +241,9 @@ class AttractScreen(Screen):
         rc = t.image("recycle.png", height=40)
         if rc is not None:
             surf.blit(rc, rc.get_rect(midtop=(48, 24)))
-        skate = t.image("broken-skate.png", height=40)
+        skate = t.image("broken-skate.png", height=48)
         if skate is not None:
-            surf.blit(skate, skate.get_rect(midtop=(48, 72)))
+            surf.blit(skate, skate.get_rect(midtop=(48, 74)))
 
         bob = int(round(5 * math.sin(self.t_ms / 600)))
         logo = t.logo(210)
@@ -199,9 +286,33 @@ class AttractScreen(Screen):
                 soft = pygame.transform.smoothscale(edge, (4, 1))   # average tones
                 surf.blit(pygame.transform.smoothscale(soft, (t.w, t.h - ph)), (0, ph))
         # keep the red frame and the call to action on the poster slides too
+        self._draw_slide_chrome(surf)
+        self._draw_cta(surf, 664)
+
+    def _draw_slide_chrome(self, surf) -> None:
+        t = self.app.theme
         r = pygame.Rect(0, 0, t.w, t.h).inflate(-12, -12)
         pygame.draw.rect(surf, K["ink"], r, 12, border_radius=26)
         pygame.draw.rect(surf, K["frame"], r.inflate(-4, -4), 8, border_radius=24)
+
+    def _draw_slide(self, surf, slide: dict) -> None:
+        """A seller-uploaded picture or video frame, full screen."""
+        t = self.app.theme
+        item = slide["item"]
+        surf.fill(K["stage"])
+        img = None
+        if slide["kind"] == "video":
+            fps = item.fps or 12.0
+            img = _video_frame(item, int(self.slide_ms / 1000.0 * fps))
+        if img is None:
+            img = load_product_image(DATA_DIR, item.thumb, t.w, t.h)
+        if img is not None:
+            surf.blit(img, img.get_rect(center=(t.w // 2, t.h // 2)))
+        else:
+            logo = t.logo(140, alpha=120)
+            if logo is not None:
+                surf.blit(logo, logo.get_rect(center=(t.w // 2, t.h // 2)))
+        self._draw_slide_chrome(surf)
         self._draw_cta(surf, 664)
 
     def _draw_cta(self, surf, top: int) -> None:
@@ -355,9 +466,9 @@ class GridScreen(Screen):
         pass
 
     def _draw_action_bar(self, surf, t) -> None:
-        top = slot_geometry(t)[-1][0].bottom + 12
+        top = L.grid_bottom(t.h) + L.CARD_GAP
         # 1) details of the product last pressed (or the hint)
-        info = pygame.Rect(36, top, t.w - 72, 44)
+        info = pygame.Rect(36, top, t.w - 72, L.INFO_H)
         if self.toast_ms:
             plate(surf, info, K["hi"], shadow=OFF_SM)
             s = t.fit_text(self.toast, info.w - 20, ("sm", "xs"))
@@ -379,7 +490,7 @@ class GridScreen(Screen):
             arrow(surf, (info.right - 12, info.centery), 10, "right")
 
         # 2) the cart ticket — red takes you to checkout
-        ticket = pygame.Rect(36, info.bottom + 12, t.w - 72, 56)
+        ticket = pygame.Rect(36, info.bottom + L.ACTION_GAP, t.w - 72, L.TICKET_H)
         count = self.app.cart_count()
         if count:
             t.go_ticket(surf, ticket, "سبد خرید و پرداخت", "md",
@@ -388,7 +499,7 @@ class GridScreen(Screen):
         else:
             t.go_ticket(surf, ticket, "سبد خرید خالیه", "md", disabled=True)
             foot = "اول یه کالا انتخاب کن"
-        foot_y = t.h - 34              # hints sit right above the frame
+        foot_y = ticket.bottom + L.HINT_H // 2 - 4   # hints just above the frame
         t.kicker(surf, foot, {"midright": (t.w - 36, foot_y)},
                  color=K["alt_ink"], size="xs", marker=K["danger"], round_marker=True)
         hint = "انصراف: برداشتن آخری" if count else "انصراف: برگشت"

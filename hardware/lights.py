@@ -5,7 +5,8 @@ MOSFET 2 (`warn_light_gpio`) drives the red lights (PWM too).
 
 Each kiosk screen names a scene; short effects play on top of it:
 
-  scenes    attract    main breathes 60–100 % every 4 s; every 25 s an
+  scenes    off        everything dark (the seller switched the booth off)
+            attract    main breathes 60–100 % every 4 s; every 25 s an
                        «insert coin» call: two short red pulses (+ the red
                        button lamp blinks fast — see `calling`)
             shop       steady 85 % (headroom for the add-to-cart blip)
@@ -46,6 +47,7 @@ class BoothLights:
         self.shop_level = float(getattr(config, "booth_light_level", 0.85))
         self.steady = bool(getattr(config, "lights_steady", False))
         self.mode = "attract"
+        self.master = 1.0                    # panel slider: 0..1 over everything
         self.scene_t = 0.0                   # seconds since the scene began
         self.effect: str | None = None
         self.effect_t = 0.0
@@ -87,6 +89,8 @@ class BoothLights:
     # --- scenes ---
 
     def _scene(self, mode: str, t: float) -> tuple[float, float]:
+        if mode == "off":
+            return 0.0, 0.0
         if self.steady and mode in ("attract", "paywait", "shop"):
             return self.shop_level, 0.0       # steady main light, red off
         if mode == "attract":
@@ -143,8 +147,8 @@ class BoothLights:
                 main, red = self._apply_effect(main, red)
         ph = self.scene_t % ATTRACT_PERIOD - ATTRACT_CALL_AT
         self.calling = self.mode == "attract" and 0 <= ph < 1.2
-        self.main = max(0.0, min(1.0, main))
-        self.red = max(0.0, min(1.0, red))
+        self.main = max(0.0, min(1.0, main)) * self.master
+        self.red = max(0.0, min(1.0, red)) * self.master
         if self._main_dev is not None and abs(getattr(self, "_last_dev_main", -1.0) - self.main) > 0.005:
             self._main_dev.value = self.main
             self._last_dev_main = self.main

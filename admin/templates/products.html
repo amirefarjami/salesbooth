@@ -1,6 +1,19 @@
 {% extends "base.html" %}
 {% set nav = 'products' %}
 {% block body %}
+<style>
+  /* cropper: the canvas IS the product card's photo window (fixed aspect) */
+  #crop-modal{position:fixed; inset:0; z-index:50; background:rgba(20,26,60,.86);
+    display:none; align-items:center; justify-content:center; padding:12px}
+  #crop-modal.on{display:flex}
+  #crop-modal .box{background:var(--paper); border:3px solid var(--ink); border-radius:16px;
+    box-shadow:8px 8px 0 var(--ink); padding:12px; max-width:100%}
+  #crop-modal h2{margin-bottom:2px}
+  #crop-canvas{display:block; margin:8px auto; border:3px solid var(--ink); border-radius:10px;
+    touch-action:none; cursor:grab; max-width:100%}
+  #crop-canvas:active{cursor:grabbing}
+  #crop-zoom{accent-color:#ec1f24; height:36px}
+</style>
 <div class="card flat" style="background:var(--hi-2)">
   <b>چه محصولی کنار کدام دکمه است؟</b>
   <p class="muted" style="color:var(--ink)">
@@ -19,7 +32,8 @@
       <label class="f">موجودی داخل ویترین<input name="stock" type="number" inputmode="numeric" min="0" value="5"></label>
       <label class="f">ترتیب (جای روی باجه)<input name="sort_order" type="number" inputmode="numeric" value="{{ products|length + 1 }}"></label>
       <label class="check"><input type="checkbox" name="active" checked> روی باجه نشان بده</label>
-      <label class="f full">عکس (از گالری یا دوربین)<input type="file" name="image" accept="image/*"></label>
+      <label class="f full">عکس (از گالری یا دوربین — بعد از انتخاب، برش می‌دهید)
+        <input type="file" name="image" accept="image/*" data-crop="1"></label>
     </div>
     <div class="actions"><button type="submit" class="primary grow">افزودن محصول</button></div>
   </form>
@@ -59,7 +73,8 @@
         <label class="f">موجودی<input name="stock" type="number" inputmode="numeric" min="0" value="{{ p.stock }}"></label>
         <label class="f">ترتیب<input name="sort_order" type="number" inputmode="numeric" value="{{ p.sort_order }}"></label>
         <label class="check"><input type="checkbox" name="active" {% if p.active %}checked{% endif %}> روی باجه نشان بده</label>
-        <label class="f full">عکس تازه (اختیاری)<input type="file" name="image" accept="image/*"></label>
+        <label class="f full">عکس تازه (اختیاری)
+          <input type="file" name="image" accept="image/*" data-crop="1"></label>
       </div>
       <div class="actions"><button class="primary grow">💾 ذخیره</button></div>
     </form>
@@ -72,4 +87,138 @@
 {% else %}
 <div class="card"><p class="muted">هنوز محصولی نیست. از «محصول جدید» اضافه کنید.</p></div>
 {% endfor %}
+
+<div id="crop-modal" role="dialog" aria-label="برش عکس محصول">
+  <div class="box">
+    <h2>✂️ برش عکس</h2>
+    <p class="muted" style="font-size:13px">
+      کادر همان قاب عکسِ کارت محصول است؛ عکس را با انگشت جابه‌جا و با اسلایدر بزرگ کنید.
+    </p>
+    <canvas id="crop-canvas"></canvas>
+    <label class="f" style="margin-top:6px">بزرگ‌نمایی
+      <input type="range" id="crop-zoom" min="100" max="300" value="100">
+    </label>
+    <div class="actions">
+      <button type="button" id="crop-ok" class="primary grow">✂️ برش و استفاده</button>
+      <button type="button" id="crop-skip" class="grow">بدون برش</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const ASPECT = {{ photo_aspect }};          // width / height of the card photo
+  const modal = document.getElementById('crop-modal');
+  const canvas = document.getElementById('crop-canvas');
+  const zoomEl = document.getElementById('crop-zoom');
+  if (!modal || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  let st = null;            // {img, iw, ih, base, zoom, ox, oy, cw, ch, input, file}
+
+  function sizeCanvas(){
+    const cw = Math.min(window.innerWidth - 64, 420);
+    const ch = Math.round(cw / ASPECT);
+    canvas.width = cw; canvas.height = ch;
+    return [cw, ch];
+  }
+
+  function clamp(){
+    const s = st.base * st.zoom;
+    const maxX = Math.max(0, (st.iw * s - st.cw) / 2);
+    const maxY = Math.max(0, (st.ih * s - st.ch) / 2);
+    st.ox = Math.max(-maxX, Math.min(maxX, st.ox));
+    st.oy = Math.max(-maxY, Math.min(maxY, st.oy));
+  }
+
+  function paint(target, W, H){
+    const k = W / st.cw;
+    target.clearRect(0, 0, W, H);
+    target.fillStyle = '#e4e9f4';
+    target.fillRect(0, 0, W, H);
+    const s = st.base * st.zoom * k;
+    const dw = st.iw * s, dh = st.ih * s;
+    target.drawImage(st.img, W / 2 + st.ox * k - dw / 2, H / 2 + st.oy * k - dh / 2, dw, dh);
+  }
+
+  function draw(){ clamp(); paint(ctx, st.cw, st.ch); }
+
+  async function open(input, file){
+    let bmp;
+    try { bmp = await createImageBitmap(file); }
+    catch (e) { return; }                     // browser can't decode it: keep as is
+    const [cw, ch] = sizeCanvas();
+    const base = Math.max(cw / bmp.width, ch / bmp.height);
+    st = { img: bmp, iw: bmp.width, ih: bmp.height, base, zoom: 1,
+           ox: 0, oy: 0, cw, ch, input, file };
+    zoomEl.value = 100;
+    modal.classList.add('on');
+    draw();
+  }
+
+  function close(){ modal.classList.remove('on'); st = null; }
+
+  // drag / pinch the picture inside the fixed frame -----------------
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => {
+    if (!st) return;
+    drag = { x: e.clientX, y: e.clientY, ox: st.ox, oy: st.oy };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag || !st) return;
+    st.ox = drag.ox + (e.clientX - drag.x);
+    st.oy = drag.oy + (e.clientY - drag.y);
+    draw();
+  });
+  canvas.addEventListener('pointerup', () => { drag = null; });
+  canvas.addEventListener('pointercancel', () => { drag = null; });
+  canvas.addEventListener('wheel', e => {
+    if (!st) return;
+    e.preventDefault();
+    setZoom(+zoomEl.value + (e.deltaY < 0 ? 10 : -10));
+  }, { passive: false });
+  zoomEl.addEventListener('input', () => setZoom(+zoomEl.value));
+  addEventListener('resize', () => {
+    if (!st) return;
+    const [cw, ch] = sizeCanvas();
+    st.cw = cw; st.ch = ch;
+    st.base = Math.max(cw / st.iw, ch / st.ih);
+    draw();
+  });
+
+  function setZoom(pct){
+    if (!st) return;
+    zoomEl.value = pct;
+    st.zoom = pct / 100;
+    draw();
+  }
+
+  document.getElementById('crop-ok').addEventListener('click', () => {
+    if (!st) return close();
+    const W = 720, H = Math.round(W / ASPECT);
+    const out = document.createElement('canvas');
+    out.width = W; out.height = H;
+    paint(out.getContext('2d'), W, H);
+    out.toBlob(blob => {
+      if (!blob) return close();
+      const name = 'product-' + Date.now() + '.jpg';
+      const f = new File([blob], name, { type: 'image/jpeg' });
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      st.input.files = dt.files;
+      close();
+    }, 'image/jpeg', 0.9);
+  });
+
+  document.getElementById('crop-skip').addEventListener('click', close);
+
+  document.querySelectorAll('input[data-crop]').forEach(input => {
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file || !file.type.startsWith('image/')) return;
+      open(input, file);
+    });
+  });
+})();
+</script>
 {% endblock %}

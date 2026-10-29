@@ -22,6 +22,7 @@ def client(tmp_path, monkeypatch):
     booth.products = __import__("core.products", fromlist=["ProductRepo"]).ProductRepo(conn)
     booth.orders = __import__("core.orders", fromlist=["OrderRepo"]).OrderRepo(conn)
     booth.stats = __import__("core.stats", fromlist=["Stats"]).Stats(conn)
+    booth.media = __import__("core.media", fromlist=["MediaRepo"]).MediaRepo(conn)
     _state["booth"] = booth
     _state["tokens"] = set()
     with TestClient(app) as c:
@@ -195,3 +196,54 @@ def test_open_orders_includes_today_stats(client):
     assert data["today"]["orders"] >= 1
     assert data["today"]["revenue"] >= 10000
 
+
+
+def test_booth_panel_power_and_brightness(client, tmp_path, monkeypatch):
+    """The panel flips data/control.json; the kiosk reads it (see
+    tests/test_booth_control.py)."""
+    from core import control as control_mod
+
+    path = tmp_path / "control.json"
+    monkeypatch.setattr(control_mod, "CONTROL_PATH", path)
+    _login(client)
+
+    page = client.get("/admin/booth")
+    assert page.status_code == 200 and "کنترل باجه" in page.text
+
+    r = client.post("/admin/booth/brightness", data={"brightness": "35"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert control_mod.read_control(path)["brightness"] == 35
+
+    client.post("/admin/booth/power", data={"on": "off"}, follow_redirects=False)
+    assert control_mod.read_control(path)["booth_on"] is False
+    client.post("/admin/booth/power", data={"on": "on"}, follow_redirects=False)
+    assert control_mod.read_control(path)["booth_on"] is True
+
+
+def test_screensaver_image_upload(client, tmp_path, monkeypatch):
+    """A PNG upload lands in the playlist with its schedule."""
+    import io
+
+    from PIL import Image
+
+    from admin import app as admin_app
+
+    monkeypatch.setattr(admin_app, "MEDIA_SCREEN_DIR", tmp_path / "media" / "screens")
+    monkeypatch.setattr(admin_app, "DATA_DIR", tmp_path)
+    _login(client)
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), (200, 40, 40)).save(buf, "PNG")
+    r = client.post("/admin/media/create",
+                    files={"file": ("poster.png", buf.getvalue(), "image/png")},
+                    data={"duration_s": "6", "start_time": "18:00",
+                          "end_time": "23:00", "active": "on"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    items = _state["booth"].media.list_all()
+    assert len(items) == 1
+    item = items[0]
+    assert item.kind == "image" and item.duration_s == 6
+    assert (item.start_time, item.end_time) == ("18:00", "23:00")
+    assert (tmp_path / item.path).is_file()
+    assert "poster.png" not in client.get("/admin/booth").text  # no raw filename leak

@@ -8,6 +8,10 @@ from __future__ import annotations
 import csv
 import io
 import secrets
+import shutil
+import subprocess
+import tempfile
+import urllib.parse
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -18,10 +22,19 @@ from fastapi.templating import Jinja2Templates
 
 from core.booth import Booth
 from core.config import DATA_DIR
+from core.control import read_control, write_control
 from core.format import format_toman, jalali_date_time
+from core.layout import PRODUCT_PHOTO_ASPECT
+from core.media import MediaItem
 from core.payment import PaymentStatus
 
 PRODUCT_IMG_DIR = DATA_DIR / "img" / "products"
+MEDIA_DIR = DATA_DIR / "media"
+MEDIA_SCREEN_DIR = MEDIA_DIR / "screens"
+MEDIA_VIDEO_DIR = MEDIA_DIR / "video"
+MEDIA_W, MEDIA_H = 480, 800          # the booth panel
+MEDIA_FPS = 12                       # video frame sequence rate
+MEDIA_MAX_VIDEO_S = 90
 SESSION_COOKIE = "chiz_admin"
 _MAX_IMG_BYTES = 20 * 1024 * 1024   # phone photos; re-encoded small on save
 _IMG_MAX_SIDE = 600                 # plenty for the 480×800 booth screen
@@ -150,6 +163,7 @@ def products_list(request: Request, booth: Booth = Depends(require_login)):
     on_booth = {p.id: i + 1 for i, p in enumerate(booth.products.list_active()[:6])}
     return templates.TemplateResponse(request, "products.html", {
         "products": booth.products.list_all(), "on_booth": on_booth,
+        "photo_aspect": round(PRODUCT_PHOTO_ASPECT, 4),
     })
 
 
@@ -352,11 +366,186 @@ def api_open_orders(booth: Booth = Depends(require_login)):
     return JSONResponse({
         "orders": out,
         "today": {"orders": today["orders"], "revenue": today["revenue"]},
+    })# ---------------------------------------------------------------- booth control
+
+class MediaError(Exception):
+    """Upload refused; the message is shown on the booth page."""
+
+
+def _back(**params) -> RedirectResponse:
+    url = "/admin/booth"
+    clean = {k: v for k, v in params.items() if v}
+    if clean:
+        url += "?" + urllib.parse.urlencode(clean)
+    return RedirectResponse(url=url, status_code=303)
+
+
+@app.get("/admin/booth", response_class=HTMLResponse)
+def booth_panel(request: Request, err: str = "", ok: str = "",
+                booth: Booth = Depends(require_login)):
+    """Power, light level and the attract-mode screensaver playlist."""
+    return templates.TemplateResponse(request, "booth.html", {
+        "control": read_control(),
+        "media": booth.media.list_all(),
+        "err": err, "ok": ok,
     })
 
 
-# ---------------------------------------------------------------- images
+@app.post("/admin/booth/power")
+def booth_power(on: str = Form("on"), booth: Booth = Depends(require_login)):
+    write_control(booth_on=(on == "on"))
+    return _back(ok="باجه روشن شد" if on == "on" else "باجه خاموش شد (پنل روشن می‌ماند)")
 
+
+@app.post("/admin/booth/brightness")
+def booth_brightness(brightness: int = Form(100),
+                     booth: Booth = Depends(require_login)):
+    state = write_control(brightness=brightness)
+    return _back(ok=f"نور روی {state['brightness']}٪ تنظیم شد")
+
+
+# ---------------------------------------------------------------- screensaver
+
+def _media_kind(upload: UploadFile) -> str | None:
+    ct = (upload.content_type or "").lower()
+    name = (upload.filename or "").lower()
+    if ct.startswith("image/") or name.endswith((".jpg", ".jpeg", ".png", ".webp")):
+        return "image"
+    if ct.startswith("video/") or name.endswith((".mp4", ".mov", ".m4v", ".webm", ".mkv")):
+        return "video"
+    return None
+
+
+def _hhmm(value: str) -> str:
+    """'9:5' → '09:05'; junk → '' (no window)."""
+    from core.media import parse_hhmm
+    m = parse_hhmm(value)
+    return "" if m is None else f"{m // 60:02d}:{m % 60:02d}"
+
+
+def _save_screen_image(upload: UploadFile) -> MediaItem:
+    """Picture → 480×800 JPEG letterboxed on the booth's navy stage."""
+    raw = upload.file.read(_MAX_IMG_BYTES + 1)
+    if len(raw) > _MAX_IMG_BYTES:
+        raise MediaError("حجم عکس از ۲۰ مگابایت بیشتر است")
+    try:
+        from PIL import Image, ImageOps
+
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
+    except Exception:
+        raise MediaError("عکس خوانده نشد؛ JPG یا PNG بفرستید")
+    img.thumbnail((MEDIA_W, MEDIA_H))
+    canvas = Image.new("RGB", (MEDIA_W, MEDIA_H), (0x24, 0x40, 0x85))
+    canvas.paste(img, ((MEDIA_W - img.width) // 2, (MEDIA_H - img.height) // 2))
+    MEDIA_SCREEN_DIR.mkdir(parents=True, exist_ok=True)
+    rel = f"media/screens/{uuid.uuid4().hex[:12]}.jpg"
+    canvas.save(DATA_DIR / rel, "JPEG", quality=88)
+    return MediaItem(id=None, kind="image", path=rel)
+
+
+def _save_video(upload: UploadFile) -> MediaItem:
+    """Video → a JPEG frame sequence (ffmpeg), so the kiosk needs no codec.
+
+    The slide's length is the video's own length: frame_count / fps."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise MediaError("ffmpeg نصب نیست؛ روی باجه «sudo apt install ffmpeg» بزنید")
+    raw = upload.file.read(_MAX_IMG_BYTES * 4)
+    if len(raw) > _MAX_IMG_BYTES * 4:
+        raise MediaError("حجم ویدیو خیلی زیاد است (حداکثر ۸۰ مگابایت)")
+    tmp = Path(tempfile.mkdtemp(prefix="chiz-video-"))
+    suffix = Path(upload.filename or "").suffix or ".mp4"
+    src = tmp / f"input{suffix}"
+    src.write_bytes(raw)
+    rel_dir = f"media/video/{uuid.uuid4().hex[:10]}"
+    out = DATA_DIR / rel_dir
+    out.mkdir(parents=True, exist_ok=True)
+    vf = (f"scale={MEDIA_W}:{MEDIA_H}:force_original_aspect_ratio=decrease,"
+          f"pad={MEDIA_W}:{MEDIA_H}:(ow-iw)/2:(oh-ih)/2:color=0x244085,fps={MEDIA_FPS}")
+    try:
+        proc = subprocess.run(
+            [ffmpeg, "-y", "-loglevel", "error", "-i", str(src),
+             "-t", str(MEDIA_MAX_VIDEO_S), "-vf", vf, "-q:v", "4",
+             str(out / "%04d.jpg")],
+            capture_output=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(out, ignore_errors=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise MediaError("تبدیل ویدیو طول کشید؛ ویدیوی کوتاه‌تری بفرستید")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    frames = sorted(out.glob("*.jpg"))
+    if proc.returncode != 0 or not frames:
+        shutil.rmtree(out, ignore_errors=True)
+        raise MediaError("ویدیو تبدیل نشد؛ فرمت یا کدکش پشتیبانی نمی‌شود (MP4/H.264 بهتر است)")
+    first = f"{rel_dir}/{frames[0].name}"
+    return MediaItem(id=None, kind="video", path=first, poster=first,
+                     frames_dir=rel_dir, fps=MEDIA_FPS, frame_count=len(frames))
+
+
+@app.post("/admin/media/create")
+def media_create(file: UploadFile = File(...), duration_s: int = Form(8),
+                 start_time: str = Form(""), end_time: str = Form(""),
+                 active: bool = Form(False),
+                 booth: Booth = Depends(require_login)):
+    kind = _media_kind(file)
+    if kind is None:
+        return _back(err="فقط عکس (JPG/PNG) یا ویدیو (MP4/MOV) قبول است")
+    try:
+        item = _save_screen_image(file) if kind == "image" else _save_video(file)
+    except MediaError as exc:
+        return _back(err=str(exc))
+    item.duration_s = max(1, min(600, int(duration_s or 8)))
+    item.start_time = _hhmm(start_time)
+    item.end_time = _hhmm(end_time)
+    item.active = active
+    item.sort_order = len(booth.media.list_all()) + 1
+    booth.media.create(item)
+    label = "ویدیو" if kind == "video" else "عکس"
+    return _back(ok=f"{label} به اسکرین سیور اضافه شد")
+
+
+@app.post("/admin/media/{mid}/update")
+def media_update(mid: int, duration_s: int = Form(8),
+                 start_time: str = Form(""), end_time: str = Form(""),
+                 active: bool = Form(False),
+                 booth: Booth = Depends(require_login)):
+    booth.media.update(mid, duration_s=max(1, min(600, int(duration_s or 8))),
+                       start_time=_hhmm(start_time), end_time=_hhmm(end_time),
+                       active=int(active))
+    return _back(ok="ذخیره شد")
+
+
+@app.post("/admin/media/{mid}/delete")
+def media_delete(mid: int, booth: Booth = Depends(require_login)):
+    item = booth.media.delete(mid)
+    if item is not None:
+        if item.frames_dir:
+            shutil.rmtree(DATA_DIR / item.frames_dir, ignore_errors=True)
+        elif item.path:
+            try:
+                (DATA_DIR / item.path).unlink()
+            except OSError:
+                pass
+    return _back(ok="حذف شد")
+
+
+@app.get("/admin/media-file/{rel_path:path}")
+def media_file(rel_path: str):
+    """Screensaver thumbnails (and video first frames) for the panel."""
+    root = MEDIA_DIR.resolve()
+    p = (DATA_DIR / rel_path).resolve()
+    if not str(p).startswith(str(root)) or not p.is_file():
+        raise HTTPException(404)
+    from fastapi.responses import FileResponse
+    mt = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+          ".png": "image/png", ".webp": "image/webp"}.get(p.suffix.lower())
+    if mt is None:
+        raise HTTPException(404)
+    return FileResponse(p, media_type=mt)
+
+
+# ---------------------------------------------------------------- images
 def _save_image(upload: UploadFile) -> str | None:
     """Any phone photo (JPEG/PNG/WebP, up to 20 MB) → upright, ≤600 px JPEG."""
     ct = (upload.content_type or "").lower()

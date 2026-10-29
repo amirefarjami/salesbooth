@@ -5,6 +5,7 @@ import sqlite3
 
 from core.config import Config, load_config
 from core.db import connect, init_schema
+from core.media import MediaRepo
 from core.orders import OrderRepo
 from core.products import ProductRepo
 from core.stats import Stats
@@ -18,6 +19,7 @@ class Booth:
         self.conn = conn
         self.products = ProductRepo(conn)
         self.orders = OrderRepo(conn)
+        self.media = MediaRepo(conn)
         self.stats = Stats(conn)
 
     @classmethod

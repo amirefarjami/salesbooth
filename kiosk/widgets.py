@@ -6,17 +6,15 @@ from pathlib import Path
 
 import pygame
 
+from core import layout as L
 from core.fa import fa_digits
 from core.models import Product
-from kiosk.theme import K, RADIUS_SM, W, burst, plate, selected_card
-
-
-NAME_H = 26          # strip under the photo for the product name
+from kiosk.theme import K, RADIUS_SM, W, W_SM, burst, plate, selected_card
 
 
 def photo_size(card: pygame.Rect) -> tuple[int, int]:
-    """Largest picture that fits a card's photo window (see ProductCard)."""
-    return card.w - 24, card.h - 22 - NAME_H - 10
+    """The picture window of a card (shared with the admin cropper)."""
+    return L.photo_size(card.w, card.h)
 
 
 def price_fa(amount: int) -> str:
@@ -27,9 +25,11 @@ def price_fa(amount: int) -> str:
 class ProductCard:
     """One product slot on the 2×3 grid.
 
-    Layout (from the hand sketch): photo on paper, the name under it, the
-    price sticker on the top tab and a yellow «×n» badge for how many are already in the cart. Each card sits
-    next to its own physical button, so it carries no number.
+    Layout (from the hand sketch): photo on paper running down to the card's
+    bottom edge, the name label centred on that line, the price sticker on
+    the top tab and an orange «×n» badge for how many are already in the
+    cart. Each card sits next to its own physical button, so it carries no
+    number.
     """
 
     def __init__(self, product: Product, rect: pygame.Rect, theme,
@@ -66,8 +66,8 @@ class ProductCard:
             plate(surf, r, K["paper"], shadow=4 - sink)
 
         # photo window (ink frame) -------------------------------------
-        name_h = NAME_H
-        img_rect = pygame.Rect(r.x + 10, r.y + 22, r.w - 20, r.h - 22 - name_h - 6)
+        img_rect = pygame.Rect(r.x + L.PAD, r.y + L.TAB,
+                               r.w - L.PAD * 2, r.h - L.TAB - L.BOTTOM)
         pygame.draw.rect(surf, K["paper_2"] if not self.selected else K["paper"], img_rect,
                          border_radius=6)
         if self.image is not None:
@@ -81,29 +81,34 @@ class ProductCard:
                 surf.blit(ph, ph.get_rect(center=img_rect.center))
         pygame.draw.rect(surf, K["ink"], img_rect, 2, border_radius=6)
 
-        # name ---------------------------------------------------------
-        # small body font so the photo gets the room
-        name = t.fit_text(self.product.name, r.w - 20, ("xs",),
+        # name: centred exactly on the photo's bottom line (which is also the
+        # card's bottom edge) — a paper label so it stays readable on a photo
+        name = t.fit_text(self.product.name, r.w - 64, ("xs",),
                           K["muted"] if self.sold_out else K["ink"])
-        surf.blit(name, name.get_rect(center=(r.centerx, r.bottom - name_h // 2 - 2)))
+        lab = pygame.Rect(0, 0, name.get_width() + 16, name.get_height() + 2)
+        lab.center = (r.centerx, img_rect.bottom)
+        pygame.draw.rect(surf, K["ink"], lab.move(2, 2), border_radius=RADIUS_SM)
+        pygame.draw.rect(surf, K["paper"], lab, border_radius=RADIUS_SM)
+        pygame.draw.rect(surf, K["ink"], lab, W_SM, border_radius=RADIUS_SM)
+        surf.blit(name, name.get_rect(center=lab.center))
 
         # price: sticker on the top tab (right corner) -----------------
+        anchor = {"topright": (r.right - L.PAD, r.top + L.TAB - 11)}
         if self.sold_out:
-            t.sticker(surf, "تمام شد", {"topright": (r.right - 8, r.top - 12)},
+            t.sticker(surf, "تمام شد", anchor,
                       fill=K["paper"], color=K["danger"], border=K["danger"], size="xs")
         else:
             # plain yellow sticker on the top tab (the burst was too busy
             # six times over; it stays only for the cart total)
-            t.sticker(surf, price_fa(self.product.price_toman),
-                      {"topright": (r.right - 8, r.top - 12)}, fill=K["hi"], size="sm")
+            t.sticker(surf, price_fa(self.product.price_toman), anchor, fill=K["hi"], size="sm")
 
-        # in-cart badge («×۲») on the photo's outer bottom corner
+        # in-cart badge («×۲») on the photo's outer bottom corner (orange)
         if self.in_cart:
-            anchor = ({"bottomright": (img_rect.right + 2, img_rect.bottom + 6)}
+            anchor = ({"bottomright": (img_rect.right + 2, img_rect.bottom - 4)}
                       if self.side == "left" else
-                      {"bottomleft": (img_rect.left - 2, img_rect.bottom + 6)})
+                      {"bottomleft": (img_rect.left - 2, img_rect.bottom - 4)})
             t.sticker(surf, f"×{fa_digits(self.in_cart)}", anchor,
-                      fill=K["hi"], size="sm", face="display")
+                      fill=K["orange"], size="sm", face="display")
 
 
 def slot_tag(surf, t, center, n: int, muted: bool = False) -> pygame.Rect:

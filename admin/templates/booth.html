@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% set nav = 'booth' %}
+{% block body %}
+{% if ok %}<div class="flash">✅ {{ ok }}</div>{% endif %}
+{% if err %}<div class="flash" style="background:#fde0e1; border-color:var(--danger)">⚠️ {{ err }}</div>{% endif %}
+
+<h2 style="color:#fff">کنترل باجه</h2>
+<div class="card">
+  <div class="row" style="justify-content:space-between; flex-wrap:wrap">
+    <div>
+      <b style="font-size:18px">وضعیت باجه</b>
+      <div class="muted">
+        {% if control.booth_on %}روشن — باجه در حال فروش است{% else %}خاموش — صفحه در حالت خواب، دکمه‌ها بی‌اثر{% endif %}
+      </div>
+    </div>
+    <span class="pill {% if control.booth_on %}ok{% else %}bad{% endif %}" style="font-size:15px">
+      {% if control.booth_on %}● روشن{% else %}● خاموش{% endif %}
+    </span>
+  </div>
+
+  <form method="post" action="/admin/booth/power" class="actions">
+    {% if control.booth_on %}
+      <input type="hidden" name="on" value="off">
+      <button class="danger grow"
+              onclick="return confirm('باجه خاموش شود؟ صفحه خواب می‌رود، چراغ‌ها خاموش و دکمه‌ها بی‌اثر می‌شوند. پنل و وای‌فای روشن می‌مانند.')">
+        🔴 خاموش کردن باجه
+      </button>
+    {% else %}
+      <input type="hidden" name="on" value="on">
+      <button class="go grow">🟢 روشن کردن باجه</button>
+    {% endif %}
+  </form>
+  <p class="muted" style="margin-top:8px">
+    خاموشی نرم است: پنل روشن می‌ماند تا از همین صفحه دوباره روشنش کنید.
+    برای قطع کامل برق، کلید اصلی دستگاه را بزنید.
+  </p>
+</div>
+
+<div class="card">
+  <h2>💡 روشنایی کل باجه</h2>
+  <form method="post" action="/admin/booth/brightness" id="dim-form">
+    <div class="row" style="gap:10px">
+      <input type="range" name="brightness" min="0" max="100" step="5"
+             value="{{ control.brightness }}" id="dim"
+             style="flex:1; accent-color:#ec1f24; height:36px"
+             oninput="document.getElementById('dim-val').textContent = this.value">
+      <b id="dim-val" style="min-width:52px; text-align:center; font-size:20px">{{ control.brightness }}٪</b>
+    </div>
+    <div class="actions">
+      <button class="primary grow">ذخیره‌ی نور</button>
+    </div>
+  </form>
+  <p class="muted" style="margin-top:8px">
+    همه‌ی چراغ‌ها (نور ویترین، چراغ‌های قرمز، نوار LED و لامپ دکمه‌ی قرمز) با هم کم و زیاد می‌شوند.
+    ۰٪ = تاریک. تغییر چند ثانیه‌ای روی باجه اعمال می‌شود.
+  </p>
+</div>
+
+<h2 style="color:#fff; margin-top:18px">اسکرین سیور (صفحه‌ی انتظار)</h2>
+<div class="card">
+  <p class="muted">
+    وقتی کسی خرید نمی‌کند، باجه اول «چطوری بخرم؟» را نشان می‌دهد و بعد این آیتم‌ها را پشت‌سرهم پخش می‌کند.
+    برای هر آیتم می‌توانید بازه‌ی ساعتی بگذارید (مثلاً فقط از ۱۸:۰۰ تا ۲۳:۰۰)؛ خالی = همیشه.
+    <b>ویدیو به اندازه‌ی طول خودش پخش می‌شود</b>، عکس به اندازه‌ی «مدت نمایش».
+  </p>
+
+  <details {% if not media %}open{% endif %}>
+    <summary style="cursor:pointer; list-style:none"><h2 style="display:inline">➕ افزودن عکس یا ویدیو</h2></summary>
+    <form method="post" action="/admin/media/create" enctype="multipart/form-data" style="margin-top:10px">
+      <div class="grid">
+        <label class="f full">فایل (JPG/PNG یا MP4/MOV)<input type="file" name="file" accept="image/*,video/*" required></label>
+        <label class="f">مدت نمایش عکس (ثانیه)
+          <input name="duration_s" type="number" inputmode="numeric" min="1" max="600" value="8">
+        </label>
+        <label class="f">از ساعت<input name="start_time" type="time"></label>
+        <label class="f">تا ساعت<input name="end_time" type="time"></label>
+        <label class="check"><input type="checkbox" name="active" checked> نمایش بده</label>
+      </div>
+      <div class="actions"><button class="primary grow">افزودن به اسکرین سیور</button></div>
+    </form>
+  </details>
+</div>
+
+{% for m in media %}
+<div class="card" {% if not m.active %}style="opacity:.7"{% endif %}>
+  <div class="row">
+    {% if m.thumb %}
+      <img class="thumb" src="/admin/media-file/{{ m.thumb }}" alt="" style="width:64px;height:106px">
+    {% endif %}
+    <div class="grow">
+      <div class="name">{% if m.kind == 'video' %}🎬 ویدیو{% else %}🖼 عکس{% endif %}
+        {% if not m.active %}<span class="pill">غیرفعال</span>{% endif %}
+      </div>
+      <div class="muted">
+        {% if m.kind == 'video' %}
+          طول ویدیو: {{ '%.1f'|format(m.seconds)|fa }} ثانیه
+        {% else %}
+          {{ m.duration_s|fa }} ثانیه
+        {% endif %}
+        {% if m.start_time or m.end_time %}
+          • نمایش از {{ m.start_time|default('۰۰:۰۰', true) }} تا {{ m.end_time|default('۲۴:۰۰', true) }}
+        {% else %}• همیشه{% endif %}
+      </div>
+      <div class="muted">ترتیب {{ m.sort_order|fa }}</div>
+    </div>
+  </div>
+
+  <details style="margin-top:10px">
+    <summary style="cursor:pointer; font-weight:700">✏️ ویرایش زمان‌بندی</summary>
+    <form method="post" action="/admin/media/{{ m.id }}/update" style="margin-top:10px">
+      <div class="grid">
+        <label class="f">مدت نمایش عکس (ثانیه)
+          <input name="duration_s" type="number" inputmode="numeric" min="1" max="600" value="{{ m.duration_s }}"
+                 {% if m.kind == 'video' %}disabled{% endif %}>
+        </label>
+        <label class="check"><input type="checkbox" name="active" {% if m.active %}checked{% endif %}> نمایش بده</label>
+        <label class="f">از ساعت<input name="start_time" type="time" value="{{ m.start_time or '' }}"></label>
+        <label class="f">تا ساعت<input name="end_time" type="time" value="{{ m.end_time or '' }}"></label>
+      </div>
+      <div class="actions"><button class="primary grow">💾 ذخیره</button></div>
+    </form>
+    <form method="post" action="/admin/media/{{ m.id }}/delete" class="actions"
+          onsubmit="return confirm('این آیتم از اسکرین سیور حذف شود؟')">
+      <button class="danger grow">🗑 حذف</button>
+    </form>
+  </details>
+</div>
+{% else %}
+<div class="card"><p class="muted">هنوز چیزی اضافه نشده؛ باجه همان پوسترهای پیش‌فرض را نشان می‌دهد.</p></div>
+{% endfor %}
+
+<script>
+/* submit the brightness form when the slider is released */
+document.getElementById('dim').addEventListener('change', function(){
+  document.getElementById('dim-form').submit();
+});
+</script>
+{% endblock %}

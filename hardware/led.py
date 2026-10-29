@@ -35,6 +35,7 @@ class LEDStrip:
         self.pin = int(getattr(config, "led_gpio", 18))
         self.brightness = int(getattr(config, "led_brightness", 160))
         self.enabled = bool(getattr(config, "led_enabled", True))
+        self.master = 1.0          # panel brightness slider (0..1)
         self._strip = None
         self._sim_state = [(0, 0, 0)] * self.count
         self.mode = "idle"
@@ -61,6 +62,10 @@ class LEDStrip:
     # --- low level ---
 
     def _show(self, frame: list) -> None:
+        if self.master <= 0:
+            frame = [(0, 0, 0)] * self.count
+        elif self.master < 1.0:
+            frame = [_scale(rgb, self.master) for rgb in frame]
         if frame == self._last_frame:
             return
         self._last_frame = frame
